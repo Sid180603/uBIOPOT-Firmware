@@ -2,9 +2,10 @@
  * @file screen_mgr.c
  * @brief Screen manager — lifecycle, transitions, and theme application.
  *
- * All public functions that touch LVGL objects must be called under lvgl_port_lock().
- * Functions starting with scr_xxx_goto / screen_mgr_show_toast acquire the lock
- * internally, so callers do NOT need to hold it.
+ * All public functions (transitions, updates) MUST be called under lvgl_port_lock().
+ * They do NOT acquire the lock themselves — this avoids double-locking when called
+ * from the engine sink (which holds the lock) or from LVGL event callbacks (which run
+ * inside lv_timer_handler under the LVGL recursive mutex).
  */
 
 #include "screen_mgr.h"
@@ -38,26 +39,43 @@ static lv_obj_t *s_scr_scan     = NULL;
 static lv_obj_t *s_scr_results  = NULL;
 static lv_obj_t *s_scr_settings = NULL;
 
-static lv_group_t   *s_group    = NULL;
-static lv_display_t *s_disp     = NULL;
+/* One lv_group per screen — encoder focus is scoped to the active screen.
+ * Per-screen groups prevent lv_group_focus_next from jumping to objects on
+ * a screen that is no longer visible after a transition. */
+static lv_group_t *s_grp_splash   = NULL;
+static lv_group_t *s_grp_home     = NULL;
+static lv_group_t *s_grp_scan     = NULL;
+static lv_group_t *s_grp_results  = NULL;
+static lv_group_t *s_grp_settings = NULL;
+
+static lv_indev_t   *s_indev = NULL;
+static lv_display_t *s_disp  = NULL;
 
 /* -------------------------------------------------------------------------
  * screen_mgr_init — called once inside lvgl_port_lock()
  * ------------------------------------------------------------------------- */
 
-void screen_mgr_init(lv_display_t *disp, lv_group_t *group)
+void screen_mgr_init(lv_display_t *disp, lv_indev_t *indev)
 {
     s_disp  = disp;
-    s_group = group;
+    s_indev = indev;
 
-    /* Create all screens */
-    s_scr_splash   = scr_splash_create(group);
-    s_scr_home     = scr_home_create(group);
-    s_scr_scan     = scr_scan_create(group);
-    s_scr_results  = scr_results_create(group);
-    s_scr_settings = scr_settings_create(group);
+    /* Create one group per screen so encoder focus stays on visible objects. */
+    s_grp_splash   = lv_group_create();
+    s_grp_home     = lv_group_create();
+    s_grp_scan     = lv_group_create();
+    s_grp_results  = lv_group_create();
+    s_grp_settings = lv_group_create();
 
-    /* Show splash first */
+    /* Create all screens, each receiving its own group. */
+    s_scr_splash   = scr_splash_create(s_grp_splash);
+    s_scr_home     = scr_home_create(s_grp_home);
+    s_scr_scan     = scr_scan_create(s_grp_scan);
+    s_scr_results  = scr_results_create(s_grp_results);
+    s_scr_settings = scr_settings_create(s_grp_settings);
+
+    /* Start on splash; bind indev to splash group initially. */
+    lv_indev_set_group(s_indev, s_grp_splash);
     lv_disp_load_scr(s_scr_splash);
 
     ESP_LOGI(TAG, "All screens created, splash loaded");
@@ -70,8 +88,18 @@ void screen_mgr_init(lv_display_t *disp, lv_group_t *group)
 static void load_screen(lv_obj_t *scr, lv_scr_load_anim_t anim)
 {
     if (!scr) return;
-    /* Switch the encoder group focus to the new screen's first focusable object */
-    if (s_group) lv_group_focus_next(s_group);
+    /* Switch the encoder indev to the group belonging to the new screen.
+     * This prevents lv_group_focus_next from targeting objects on a screen
+     * that is leaving — encoder focus is always scoped to the visible screen. */
+    if (s_indev) {
+        lv_group_t *g = NULL;
+        if      (scr == s_scr_home)     g = s_grp_home;
+        else if (scr == s_scr_scan)     g = s_grp_scan;
+        else if (scr == s_scr_results)  g = s_grp_results;
+        else if (scr == s_scr_settings) g = s_grp_settings;
+        else if (scr == s_scr_splash)   g = s_grp_splash;
+        if (g) lv_indev_set_group(s_indev, g);
+    }
     lv_scr_load_anim(scr, anim, 200, 0, false);
 }
 
@@ -79,39 +107,31 @@ static void load_screen(lv_obj_t *scr, lv_scr_load_anim_t anim)
  * Public — screen transitions (acquire lock internally)
  * ------------------------------------------------------------------------- */
 
+/* All callers (LVGL event callbacks and engine sink) already hold lvgl_port_lock(). */
+
 void screen_mgr_goto_home(void)
 {
-    if (!lvgl_port_lock(0)) return;
     load_screen(s_scr_home, LV_SCR_LOAD_ANIM_MOVE_RIGHT);
-    lvgl_port_unlock();
 }
 
 void screen_mgr_goto_scan(void)
 {
-    if (!lvgl_port_lock(0)) return;
     load_screen(s_scr_scan, LV_SCR_LOAD_ANIM_MOVE_LEFT);
-    lvgl_port_unlock();
 }
 
 void screen_mgr_goto_results(void)
 {
-    if (!lvgl_port_lock(0)) return;
     load_screen(s_scr_results, LV_SCR_LOAD_ANIM_MOVE_LEFT);
-    lvgl_port_unlock();
 }
 
 void screen_mgr_goto_settings(void)
 {
-    if (!lvgl_port_lock(0)) return;
     load_screen(s_scr_settings, LV_SCR_LOAD_ANIM_OVER_LEFT);
-    lvgl_port_unlock();
 }
 
 void screen_mgr_show_toast(const char *msg)
 {
-    if (!lvgl_port_lock(0)) return;
     scr_toast_show(msg);
-    lvgl_port_unlock();
 }
 
 /* -------------------------------------------------------------------------

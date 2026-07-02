@@ -51,12 +51,17 @@ extern "C" {
  * @brief  Initialise the screen manager: apply theme, create all screens.
  *         Must be called inside lvgl_port_lock() after lvgl_port_add_disp().
  * @param  disp   LVGL display handle returned by lvgl_port_add_disp().
- * @param  group  The lv_group that owns all focusable objects (encoder nav).
+ * @param  indev  Encoder input device handle (returned by lv_indev_create).
+ *                screen_mgr creates one lv_group per screen and switches the
+ *                indev's active group on every screen transition so encoder
+ *                focus always targets an object on the visible screen.
  */
-void screen_mgr_init(lv_display_t *disp, lv_group_t *group);
+void screen_mgr_init(lv_display_t *disp, lv_indev_t *indev);
 
 /* -------------------------------------------------------------------------
- * Screen transitions (all safe to call from any context — acquire lock internally)
+ * Screen transitions — MUST be called under lvgl_port_lock().
+ * They do NOT acquire the lock internally (avoids double-locking from the
+ * engine sink or LVGL event callbacks, both of which hold the lock already).
  * ------------------------------------------------------------------------- */
 
 void screen_mgr_goto_home(void);
@@ -89,6 +94,13 @@ void scr_scan_set_progress(uint16_t step, uint16_t total);
 
 /** Switch scan screen to equilibration state (spinner + "Equilibrating..."). */
 void scr_scan_set_equilibrating(bool eq);
+
+/**
+ * @brief  Return the electrode currently selected on the home screen.
+ *         1/2/3 = individual electrode; 0 = All (sequential).
+ *         Used by the engine sink to synchronise s_electrode on SCAN_EVT_START.
+ */
+uint8_t scr_home_get_electrode(void);
 
 /* -------------------------------------------------------------------------
  * Results screen updates

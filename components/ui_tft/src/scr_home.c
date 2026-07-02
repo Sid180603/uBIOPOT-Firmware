@@ -163,9 +163,6 @@ static void menu_item_click(lv_event_t *e)
         }
         case MENU_ELECTRODE:
             /* Cycle: 1 → 2 → 3 → 0(All) → 1 */
-            s_electrode = (s_electrode % 4);   /* 1→2→3→0→1 */
-            if (s_electrode == 0) s_electrode = 4 % 4; /* handle 0→cycle back to 1 */
-            /* Simpler cycle: */
             if (s_electrode == 0 || s_electrode > 3) s_electrode = 1;
             else if (s_electrode == 3) {
                 s_electrode = 0;  /* after 3, select All */
@@ -278,4 +275,9 @@ void scr_home_set_electrode(uint8_t electrode)
 {
     s_electrode = electrode;
     if (s_scr) update_electrode_label();
+}
+
+uint8_t scr_home_get_electrode(void)
+{
+    return s_electrode;
 }

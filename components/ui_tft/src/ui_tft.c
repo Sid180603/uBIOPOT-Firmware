@@ -152,16 +152,20 @@ static void sink_on_event(scan_event_t evt, const char *info, void *ctx)
 {
     (void)ctx;
 
-    if (!lvgl_port_lock(50)) {
-        ESP_LOGW(TAG, "sink_on_event: failed to acquire LVGL lock");
-        return;
-    }
+    /* Block indefinitely — events are rare and brief to process.
+     * A 50 ms timeout would silently drop SCAN_EVT_SCAN_DONE / SCAN_EVT_ERROR,
+     * leaving the UI stuck on the scan screen with LEDs in PROCESSING state. */
+    if (!lvgl_port_lock(0)) return;
 
     switch (evt) {
         case SCAN_EVT_START:
+            /* Sync electrode from home screen (BUG 1 fix: was always 1). */
+            s_electrode = scr_home_get_electrode();
             s_pt_count = 0;
             scr_scan_reset(s_electrode);
-            scr_scan_set_equilibrating(false);
+            /* Show equilibration spinner immediately — DPV always equilibrates
+             * first; SCAN_EVT_EQUILIB_DONE will clear it (ISSUE 2 fix). */
+            scr_scan_set_equilibrating(true);
             scr_home_set_state(SCAN_STATE_RUNNING);
             pstat_led_set(PSTAT_LED_READY,      false);
             pstat_led_set(PSTAT_LED_PROCESSING, true);
@@ -379,24 +383,23 @@ esp_err_t ui_tft_start(void)
     }
 
     /* ------------------------------------------------------------------
-     * 6. Encoder indev + lv_group (2-button: NAV=rotate, START=enter)
+     * 6. Encoder indev (2-button: NAV=rotate, START=enter).
+     *    screen_mgr_init creates per-screen groups and assigns them to the
+     *    indev on each transition — no single shared group needed here.
      * ------------------------------------------------------------------ */
     if (!lvgl_port_lock(0)) return ESP_FAIL;
-
-    lv_group_t *grp = lv_group_create();
-    lv_group_set_default(grp);
 
     s_indev = lv_indev_create();
     lv_indev_set_type(s_indev, LV_INDEV_TYPE_ENCODER);
     lv_indev_set_mode(s_indev, LV_INDEV_MODE_EVENT);
     lv_indev_set_read_cb(s_indev, encoder_read_cb);
     lv_indev_set_disp(s_indev, disp);
-    lv_indev_set_group(s_indev, grp);
+    /* Group assigned by screen_mgr_init below (one per screen). */
 
     /* ------------------------------------------------------------------
-     * 7. All screens
+     * 7. All screens — pass indev so screen_mgr can switch groups
      * ------------------------------------------------------------------ */
-    screen_mgr_init(disp, grp);
+    screen_mgr_init(disp, s_indev);
 
     lvgl_port_unlock();
 

@@ -97,16 +97,46 @@ After the first build, commit the generated `dependencies.lock`:
 |-------|--------|-------------|
 | P0 | ✅ Done | Scaffolding — repo, build system, component skeletons, host tests, CI |
 | P1 | ✅ Done | HAL + drivers (MCP4921 SPI DAC, ADS1115 I²C ADC, CD4066 mux, iot_button, LEDs, selftest) |
-| P2 | ⏳ | Electrochemistry core + full DPV algorithm + Unity tests |
-| P3 | ⏳ | Acquisition engine (FreeRTOS tasks, queues, server-auth buffer, engine API) |
-| P4 | ⏳ | On-device LVGL UI (ILI9341, 2-button encoder nav, live voltammogram) |
-| P5 | ⏳ | Connectivity (WiFi SoftAP+STA, captive portal, WebSocket, HTTP API) |
-| P6 | ⏳ | Web SPA (uPlot, dark theme, CSV export/import overlay) |
+| P2 | ✅ Done | Electrochemistry core + full DPV algorithm + Unity host tests (all 4 suites green) |
+| P3 | ✅ Done | Acquisition engine (FreeRTOS Core-1 AcqTask, Core-0 Dispatcher, server-auth buffer, sink API) |
+| P4 | ✅ Done | On-device LVGL UI (ILI9341, 2-button encoder nav, 6 screens, live voltammogram, engine sink) |
+| P5 | ⏳ | Connectivity (WiFi SoftAP+STA, captive portal, mDNS, WebSocket, HTTP API, LittleFS) |
+| P6 | ⏳ | Web SPA (uPlot, dark theme, live chart, CSV export/import overlay, Playwright tests) |
 | P7 | ⏳ | USB serial protocol (NDJSON, parity with web) — **publishable milestone** |
-| P8 | ⏳ | Persistence + calibration (NVS, auto-zero, bench calibration) |
-| P9 | ⏳ | Integration + hardware validation vs commercial instrument + thesis figures |
+| P8 | ⏳ | Persistence + calibration (NVS, auto-zero, bench calibration, concentration slopes) |
+| P9 | ⏳ | Integration + hardware validation vs commercial instrument + perf profiling + thesis figures |
 
 **Publishable milestone:** end of P7 — DPV working across TFT + WiFi web + USB serial simultaneously.
+
+**Build status (P4):** 1816/1816 objects, 623 KB binary, 60% flash free, 0 errors.
+
+---
+
+## P4 On-device UI — Dev Loop (LVGL PC Simulator)
+
+All screen layout and animation work happens on the PC **before** flashing — rebuild takes < 2 s vs a 30–60 s flash cycle.
+
+```
+sim/
+  lv_conf.h    — LVGL9 config matching firmware (depth 16, Montserrat 14/20/28)
+  main_sim.c   — SDL2 sim entry point with synthetic DPV Gaussian scan
+  README.md    — Windows setup instructions
+```
+
+See [`sim/README.md`](sim/README.md) for the full setup guide (`lv_port_pc_vscode` + SDL2 + CMake).
+
+Quick start:
+```
+git clone --recursive https://github.com/lvgl/lv_port_pc_vscode
+# copy sim/lv_conf.h and sim/main_sim.c into the clone
+cmake -B build -G Ninja
+cmake --build build
+./build/lvgl_sdl          # opens 320×240 landscape window, full UI with synthetic scan
+```
+
+**What the sim proves:** screen layout, navigation flow, chart animation, transitions, fonts, colours.
+**What only the real board proves:** RGB565 byte-swap colour accuracy, 40 MHz SPI refresh smoothness,
+RAM budget under WiFi + LVGL simultaneously, physical button ergonomics.
 
 ---
 

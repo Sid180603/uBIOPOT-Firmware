@@ -42,6 +42,7 @@
 #include "esp_log.h"
 
 #include <string.h>
+#include <stdlib.h>
 #include <stdatomic.h>
 
 static const char *TAG = "acq_engine";
@@ -355,21 +356,30 @@ static void acquisition_task(void *arg)
             s_current_electrode = elec;
             s_point_idx         = 0;
 
+            /* BUG FIX: for electrodes after the first in an ELECTRODE_ALL scan,
+             * the state is RUNNING (from the previous electrode), not IDLE.
+             * Transition back through COMPLETE -> IDLE so the START transition
+             * fires correctly and sinks see a consistent state sequence. */
+            if (elec > elec_first) {
+                state_set(scan_state_next(SCAN_STATE_RUNNING, SCAN_EVT_SCAN_DONE));
+                state_set(scan_state_next(SCAN_STATE_COMPLETE, SCAN_EVT_RESET));
+            }
+
             /* Select electrode on mux. */
             pstat_mux_select(elec);
 
-            /* State: IDLE → EQUILIBRATING. Notify sinks via scan_started event. */
+            /* State: IDLE -> EQUILIBRATING. Notify sinks via scan_started event. */
             state_set(scan_state_next(SCAN_STATE_IDLE, SCAN_EVT_START));
             post_event(SCAN_EVT_START, "DPV");
 
-            /* State: EQUILIBRATING → RUNNING.
+            /* State: EQUILIBRATING -> RUNNING.
              * The actual equilibration delay happens inside technique->run() via
              * the injected delay_ms callback, so RUNNING starts immediately here.
              * UIs see EQUILIBRATING briefly then RUNNING. */
             state_set(scan_state_next(SCAN_STATE_EQUILIBRATING, SCAN_EVT_EQUILIB_DONE));
             post_event(SCAN_EVT_EQUILIB_DONE, NULL);
 
-            /* Run the technique — blocks for the full scan duration. */
+            /* Run the technique -- blocks for the full scan duration. */
             int rc = t->run(&params, s_cal, &s_hal_cb);
 
             if (rc > 0 || atomic_load(&s_abort_flag)) {
@@ -381,7 +391,7 @@ static void acquisition_task(void *arg)
                 ESP_LOGE(TAG, "Scan error rc=%d (electrode %u)", rc, (unsigned)elec);
                 break;
             }
-            /* Electrode done — loop continues to next electrode if ALL. */
+            /* Electrode done -- loop continues to next electrode if ALL. */
         }
 
         /* Post-scan state transitions.
@@ -545,24 +555,33 @@ void engine_resync(const engine_sink_t *sink)
 {
     if (!sink || !sink->on_resync) return;
 
-    /* Take a consistent snapshot of the buffer + state, then call on_resync
-     * without holding the mutex (avoids holding it across an unknown callback). */
-    DataPoint   snapshot[ENGINE_SCAN_BUF_MAX];
-    uint16_t    count = 0;
-    scan_state_t state;
+    /* BUG FIX: the original code allocated snapshot[ENGINE_SCAN_BUF_MAX] on the
+     * stack (1300 x 16 = 20.8 KB), which would overflow any task stack, especially
+     * DispatcherTask (3 KB).  Use heap allocation sized to the actual point count
+     * so the cost is proportional to the data, not the buffer capacity. */
+    DataPoint    *snapshot = NULL;
+    uint16_t      count    = 0;
+    scan_state_t  state;
 
     if (xSemaphoreTake(s_buf_mutex, pdMS_TO_TICKS(200)) == pdTRUE) {
         count = s_scan_buf_count;
-        if (count > 0) {
-            memcpy(snapshot, s_scan_buf, count * sizeof(DataPoint));
-        }
         state = atomic_load(&s_scan_state);
+        if (count > 0) {
+            snapshot = malloc(count * sizeof(DataPoint));
+            if (snapshot) {
+                memcpy(snapshot, s_scan_buf, count * sizeof(DataPoint));
+            } else {
+                ESP_LOGW(TAG, "engine_resync: malloc failed for %u points", (unsigned)count);
+                count = 0;
+            }
+        }
         xSemaphoreGive(s_buf_mutex);
     } else {
         ESP_LOGW(TAG, "engine_resync: could not acquire buf mutex");
         return;
     }
 
-    sink->on_resync(count > 0 ? snapshot : NULL, count, state, sink->ctx);
+    sink->on_resync(snapshot, count, state, sink->ctx);
+    free(snapshot); /* safe: free(NULL) is a no-op when count == 0 */
 }
 

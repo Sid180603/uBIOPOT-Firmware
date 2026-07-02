@@ -17,6 +17,7 @@
 
 #include "esp_err.h"
 #include "echem_core/calibration.h"
+#include "echem_core/technique.h"  /* for hal_callbacks_t */
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -119,7 +120,8 @@ esp_err_t pstat_led_set(pstat_led_t led, bool on);
  * NAV=GPIO0   (active-low, STRAPPING PIN — HIGH at boot, never hold at power-on).
  * ========================================================================== */
 
-typedef void (*pstat_button_cb_t)(void *arg);
+/* button_cb_t in iot_button v4.x: (button_handle, usr_data) */
+typedef void (*pstat_button_cb_t)(void *button_handle, void *usr_data);
 
 /** Initialise both button devices (iot_button). Must be called before registering callbacks. */
 esp_err_t pstat_buttons_init(void);

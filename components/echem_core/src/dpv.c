@@ -61,38 +61,101 @@ static int dpv_run(const technique_params_t *params,
                    const pstat_calib_t     *cal,
                    const hal_callbacks_t   *hal)
 {
-    /*
-     * TODO P2: implement full DPV algorithm.
-     *
-     * Algorithm outline (to be filled in P2):
-     *
-     * 1. Equilibration: set_voltage(E_begin); delay_ms(t_equilibration_ms)
-     * 2. For each cycle c in [0, cycles):
-     *    a. Determine step direction: sign = (e_end > e_begin) ? +1 : -1
-     *    b. For each step E from e_begin to e_end by sign * e_step_mV:
-     *       i.  set_voltage(E)
-     *       ii. delay_ms(t_period_ms - t_pulse_ms - avg_timing_overhead)
-     *       iii. I_base = read_current_uA(n_avg)       ← END of baseline
-     *       iv.  set_voltage(E + sign * e_pulse_mV)
-     *       v.   delay_ms(t_pulse_ms - avg_timing_overhead)
-     *       vi.  I_pulse = read_current_uA(n_avg)      ← END of pulse
-     *       vii. RE_mV = read_cell_volt() * 1000.0f
-     *       viii. emit_point(E, I_pulse - I_base, RE_mV)
-     *       ix.  if (check_abort()) return +1;          ← instant abort, < 1 step latency
-     *
-     * Fixes vs original Python2.ino:
-     *   - Stateless/re-entrant (no sticky `cycles` member)
-     *   - Separate V/I calibration (no copy-paste polynomial bug)
-     *   - Real timed averaging with overhead compensation
-     *   - Measured RE voltage (not reconstructed from DAC count)
-     *   - Abort support at every step
-     *
-     * This stub compiles cleanly and satisfies P0 DoD. P2 fills in the body.
-     */
-    (void)params;
+    const dpv_params_t *p = (const dpv_params_t *)params;
+
+    /* cal is available for future inline conversions (e.g. volt_to_dac inside the algo).
+     * The HAL callbacks own calibration internally for now; suppress the warning. */
     (void)cal;
-    (void)hal;
-    return 0; /* "complete" */
+
+    /*
+     * Timing overhead for one averaging call (n_avg samples @ ~860 SPS).
+     * At 860 SPS the ADS1115 produces one sample every ~1.163 ms.
+     * We space samples 1.2 ms apart to be safe.
+     * Overhead per read = n_avg * 1.2 ms.
+     *
+     * This is subtracted from the delay periods so the true baseline and pulse
+     * durations remain accurate regardless of n_avg.
+     *
+     * In host tests n_avg is typically 1 and the mock delay_ms is a no-op,
+     * so overhead_ms = 0 in practice — the test sees the raw timing numbers.
+     */
+    const uint32_t sample_interval_ms = 2u; /* conservative; real HW uses 1.2 ms */
+    const uint32_t overhead_ms = (uint32_t)p->n_avg * sample_interval_ms;
+
+    /* Clamp so subtraction never underflows (guards against tiny t_pulse_ms). */
+    uint32_t baseline_delay_ms = (p->t_period_ms > p->t_pulse_ms + overhead_ms)
+                                 ? (p->t_period_ms - p->t_pulse_ms - overhead_ms)
+                                 : 0u;
+    uint32_t pulse_delay_ms    = (p->t_pulse_ms > overhead_ms)
+                                 ? (p->t_pulse_ms - overhead_ms)
+                                 : 0u;
+
+    /* Scan direction: positive if sweeping anodic (e_end > e_begin). */
+    float sign = (p->e_end_mV >= p->e_begin_mV) ? 1.0f : -1.0f;
+
+    /* Convert mV → V for set_voltage callbacks. */
+    const float mV_to_V = 1.0e-3f;
+
+    /* ------------------------------------------------------------------ */
+    /* Equilibration: hold at e_begin to let the electrode stabilise.      */
+    /* ------------------------------------------------------------------ */
+    hal->set_voltage(p->e_begin_mV * mV_to_V, hal->ctx);
+    if (p->t_equilibration_ms > 0u) {
+        hal->delay_ms(p->t_equilibration_ms, hal->ctx);
+    }
+
+    /* Check abort even before the sweep starts. */
+    if (hal->check_abort(hal->ctx)) {
+        return 1; /* aborted */
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Sweep: cycles × steps.                                              */
+    /* ------------------------------------------------------------------ */
+    for (uint8_t cycle = 0; cycle < p->cycles; cycle++) {
+
+        /* Number of steps: ceil(|e_end - e_begin| / e_step). */
+        float span  = (p->e_end_mV - p->e_begin_mV) * sign; /* always ≥ 0 */
+        int   steps = (int)ceilf(span / p->e_step_mV);
+        if (steps <= 0) steps = 1; /* degenerate: at least one sample */
+
+        for (int s = 0; s < steps; s++) {
+
+            /* Compute E by index to avoid accumulated floating-point drift.
+             * No last-step clamping: the natural step grid is correct. */
+            float E = p->e_begin_mV + (float)s * sign * p->e_step_mV;
+
+            /* ---- Baseline phase ---- */
+            hal->set_voltage(E * mV_to_V, hal->ctx);
+            if (baseline_delay_ms > 0u) {
+                hal->delay_ms(baseline_delay_ms, hal->ctx);
+            }
+            float I_base = hal->read_current_uA(p->n_avg, hal->ctx);
+
+            /* ---- Pulse phase ---- */
+            float E_pulse = E + sign * p->e_pulse_mV;
+            hal->set_voltage(E_pulse * mV_to_V, hal->ctx);
+            if (pulse_delay_ms > 0u) {
+                hal->delay_ms(pulse_delay_ms, hal->ctx);
+            }
+            float I_pulse = hal->read_current_uA(p->n_avg, hal->ctx);
+
+            /* ---- RE readback (AIN0, on-demand) ---- */
+            float RE_V  = hal->read_cell_volt(hal->ctx);
+            float RE_mV = RE_V * 1.0e3f;
+
+            /* ---- Emit data point ---- */
+            /* x-axis = BASE potential E, y-axis = dI = I_pulse − I_base */
+            hal->emit_point(E, I_pulse - I_base, RE_mV, hal->ctx);
+
+            /* ---- Abort check (every step, < 1 step latency) ---- */
+            if (hal->check_abort(hal->ctx)) {
+                return 1; /* aborted */
+            }
+        }
+    }
+
+    return 0; /* scan complete */
 }
 
 static const technique_t s_dpv_technique = {

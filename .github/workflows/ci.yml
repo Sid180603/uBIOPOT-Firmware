@@ -59,13 +59,13 @@ jobs:
 
       - name: Verify echem_core purity (no esp_*/FreeRTOS headers)
         run: |
-          echo "=== Checking echem_core for forbidden includes ==="
-          if grep -r "esp_" components/echem_core/include components/echem_core/src; then
-            echo "FAIL: esp_* found in echem_core — breaks host testability invariant"
+          echo "=== Checking echem_core for forbidden #include directives ==="
+          if grep -rn '^#include.*esp_' components/echem_core/include components/echem_core/src; then
+            echo "FAIL: #include of esp_* found in echem_core — breaks host testability invariant"
             exit 1
           fi
-          if grep -r "freertos" components/echem_core/include components/echem_core/src; then
-            echo "FAIL: freertos found in echem_core — breaks host testability invariant"
+          if grep -rn '^#include.*[Ff]ree[Rr]TOS\|^#include.*freertos' components/echem_core/include components/echem_core/src; then
+            echo "FAIL: #include of FreeRTOS found in echem_core — breaks host testability invariant"
             exit 1
           fi
-          echo "PASS: echem_core is clean (no esp_*/FreeRTOS dependencies)"
+          echo "PASS: echem_core is clean (no esp_*/FreeRTOS #include directives)"

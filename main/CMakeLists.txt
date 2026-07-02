@@ -7,5 +7,5 @@ idf_component_register(
         acq_engine
         ui_tft
         net_comms
-        esp_log
+        log
 )

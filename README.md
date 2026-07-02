@@ -96,8 +96,8 @@ After the first build, commit the generated `dependencies.lock`:
 | Phase | Status | Description |
 |-------|--------|-------------|
 | P0 | ✅ Done | Scaffolding — repo, build system, component skeletons, host tests, CI |
-| P1 | ⏳ | HAL + drivers (MCP4921, ADS1115 continuous, CD4066, buttons, LEDs) |
-| P2 | ⏳ | Electrochemistry core + DPV algorithm + Unity tests |
+| P1 | ✅ Done | HAL + drivers (MCP4921 SPI DAC, ADS1115 I²C ADC, CD4066 mux, iot_button, LEDs, selftest) |
+| P2 | ⏳ | Electrochemistry core + full DPV algorithm + Unity tests |
 | P3 | ⏳ | Acquisition engine (FreeRTOS tasks, queues, server-auth buffer, engine API) |
 | P4 | ⏳ | On-device LVGL UI (ILI9341, 2-button encoder nav, live voltammogram) |
 | P5 | ⏳ | Connectivity (WiFi SoftAP+STA, captive portal, WebSocket, HTTP API) |
@@ -107,6 +107,30 @@ After the first build, commit the generated `dependencies.lock`:
 | P9 | ⏳ | Integration + hardware validation vs commercial instrument + thesis figures |
 
 **Publishable milestone:** end of P7 — DPV working across TFT + WiFi web + USB serial simultaneously.
+
+---
+
+## P1 Bench Bringup Checklist
+
+Flash with `CONFIG_UBIOPOT_SELFTEST_MODE=y` (menuconfig → uBIOPOT → Dev/Debug):
+
+    idf.py menuconfig          # enable UBIOPOT_SELFTEST_MODE
+    idf.py -p <PORT> flash monitor
+
+Selftest sequence (automated, ~40 s):
+1. **LED blink** — READY + PROCESSING alternate × 3 (visual)
+2. **DAC ramp** — steps 0→4095 in 512 increments, prints `Vout_expected` — verify with DMM at MCP4921 Vout pin
+3. **ADC reads** — 10 samples from AIN1 (current) + AIN0 (voltage), logs µA and V
+4. **Mux cycle** — T1→T2→T3→off, 100 ms each — verify with oscilloscope (only one HIGH at a time)
+5. **Button wait** — 10 s window; press START (GPIO14) or NAV (GPIO0) to log debounce events
+
+**P1 DoD** (hardware bench):
+- [ ] `i2c_master_probe(0x48)` → `ADS1115 ADC init OK` in serial log
+- [ ] DAC output linear: code 0→4095 tracks Vout 0→3.3 V (DMM)
+- [ ] ADS1115 reads a known reference voltage correctly
+- [ ] Mux lines isolate: only one of T1/T2/T3 HIGH at a time (scope)
+- [ ] START + NAV buttons log single-click and long-press events
+- [ ] READY LED = GPIO12 boots clean (no strapping fault)
 
 ---
 

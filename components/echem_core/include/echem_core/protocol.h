@@ -60,8 +60,9 @@ typedef struct {
 
 /* --------------------------------------------------------------------------
  * NDJSON output formatters (device → host)
- * All return the number of bytes written (excluding '\0'), or -1 on truncation.
- * Each line ends with '\n' as required by NDJSON (newline-delimited JSON).
+ * All return the number of bytes written (excluding '\0'), or -1 on error or
+ * buffer truncation. Each line ends with '\n' (NDJSON requirement).
+ * User-supplied strings (msg, technique) are JSON-escaped before embedding.
  * -------------------------------------------------------------------------- */
 
 /**

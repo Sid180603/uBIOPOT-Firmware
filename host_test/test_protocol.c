@@ -168,16 +168,37 @@ void test_hello_ends_with_newline(void)
 }
 
 /* ==============================================================================
- * Buffer truncation safety
- * snprintf must not overflow even if buf is tiny.
+ * JSON escape correctness
  * ============================================================================== */
 
-void test_format_point_tiny_buffer_no_crash(void)
+void test_event_error_escapes_double_quote(void)
+{
+    char buf[256];
+    /* A message containing " should be escaped to \" in the JSON output */
+    protocol_format_event_error(buf, sizeof(buf), "bad \"param\"");
+    /* The escaped form in the output buffer is \" */
+    TEST_ASSERT_NOT_NULL(strstr(buf, "\\\"param\\\""));
+    TEST_ASSERT_NOT_NULL(strstr(buf, "scan_error"));
+}
+
+void test_event_error_escapes_backslash(void)
+{
+    char buf[256];
+    protocol_format_event_error(buf, sizeof(buf), "path\\value");
+    /* \ becomes \\ in JSON output */
+    TEST_ASSERT_NOT_NULL(strstr(buf, "path\\\\value"));
+}
+
+/* ==============================================================================
+ * Buffer truncation returns -1
+ * ============================================================================== */
+
+void test_format_point_tiny_buffer_returns_minus1(void)
 {
     char buf[4] = {0};
-    /* Must not crash or overflow — snprintf guarantees null termination */
-    protocol_format_point(buf, sizeof(buf), 1, 0, 0.0f, 0.0f, 0.0f);
-    /* buf is still null-terminated */
+    int n = protocol_format_point(buf, sizeof(buf), 1, 0, 0.0f, 0.0f, 0.0f);
+    TEST_ASSERT_EQUAL_INT(-1, n);
+    /* snprintf still null-terminates even when truncating */
     TEST_ASSERT_EQUAL_CHAR('\0', buf[3]);
 }
 
@@ -206,6 +227,8 @@ int main(void)
     RUN_TEST(test_hello_has_proto_version);
     RUN_TEST(test_hello_has_fw_version);
     RUN_TEST(test_hello_ends_with_newline);
-    RUN_TEST(test_format_point_tiny_buffer_no_crash);
+    RUN_TEST(test_event_error_escapes_double_quote);
+    RUN_TEST(test_event_error_escapes_backslash);
+    RUN_TEST(test_format_point_tiny_buffer_returns_minus1);
     return UNITY_END();
 }

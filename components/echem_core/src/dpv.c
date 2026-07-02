@@ -11,6 +11,7 @@
 #define DPV_ERR_TIMING       (-4)  /**< t_pulse >= t_period or t_pulse == 0 */
 #define DPV_ERR_CYCLES       (-5)  /**< cycles == 0 */
 #define DPV_ERR_ELECTRODE    (-6)  /**< electrode not 0/1/2/3 */
+#define DPV_ERR_N_AVG        (-7)  /**< n_avg == 0 */
 
 /* ---- Technique interface implementations ---- */
 
@@ -48,6 +49,10 @@ static int dpv_validate(const technique_params_t *params, char *err, size_t elen
     if ((int)p->electrode < 0 || (int)p->electrode > 3) {
         if (err && elen) snprintf(err, elen, "electrode must be 0 (ALL), 1, 2, or 3");
         return DPV_ERR_ELECTRODE;
+    }
+    if (p->n_avg == 0) {
+        if (err && elen) snprintf(err, elen, "n_avg must be >= 1");
+        return DPV_ERR_N_AVG;
     }
     return 0;
 }

@@ -165,6 +165,15 @@ void test_dpv_validate_electrode_all(void)
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, rc, err);
 }
 
+void test_dpv_validate_n_avg_zero(void)
+{
+    dpv_params_t p = DPV_PARAMS_DEFAULT;
+    p.n_avg = 0;
+    char err[64] = {0};
+    int rc = dpv_get_technique()->validate(&p, err, sizeof(err));
+    TEST_ASSERT_LESS_THAN(0, rc);
+}
+
 void test_dpv_validate_e_boundary_plus_1000(void)
 {
     dpv_params_t p = DPV_PARAMS_DEFAULT;
@@ -200,6 +209,7 @@ int main(void)
     RUN_TEST(test_dpv_validate_pulse_exceeds_period);
     RUN_TEST(test_dpv_validate_cycles_zero);
     RUN_TEST(test_dpv_validate_invalid_electrode);
+    RUN_TEST(test_dpv_validate_n_avg_zero);
     RUN_TEST(test_dpv_validate_electrode_all);
     RUN_TEST(test_dpv_validate_e_boundary_plus_1000);
     return UNITY_END();

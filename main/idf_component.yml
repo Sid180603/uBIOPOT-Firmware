@@ -1,0 +1,24 @@
+## IDF Component Manager manifest for uBIOPOT main component.
+## Run `idf.py build` to resolve; commit the generated dependencies.lock.
+
+dependencies:
+  ## TFT display driver + LVGL integration (P4)
+  ## esp_lvgl_port pulls: lvgl/lvgl (LVGL9), espressif/button (iot_button debounced GPIO).
+  espressif/esp_lvgl_port:
+    version: ">=2.8.0,<3.0.0"
+
+  ## ILI9341 SPI panel driver for esp_lcd (P4)
+  espressif/esp_lcd_ili9341:
+    version: ">=2.0.0,<3.0.0"
+
+  ## LittleFS wear-leveled flash filesystem for web assets + CSV (P5/P6)
+  joltwallet/littlefs:
+    version: ">=1.22.1,<2.0.0"
+
+  ## mDNS for ubiopot.local hostname resolution (P5)
+  espressif/mdns:
+    version: ">=1.0.0"
+
+  ## IDF version constraint — must match CI pin
+  idf:
+    version: ">=5.4.0,<6.0.0"

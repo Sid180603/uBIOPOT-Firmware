@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  # ============================================================================
+  # Job 1: Firmware build
+  # Compiles the full ESP-IDF project for esp32 target.
+  # Resolves managed components (esp_lvgl_port, esp_lcd_ili9341, littlefs, mdns).
+  # Verifies the build links cleanly and fits within the 1500K factory partition.
+  # ============================================================================
+  firmware-build:
+    name: Firmware Build (ESP-IDF v5.4.4 / esp32)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Build firmware
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.4.4
+          target: esp32
+          path: '.'
+          command: idf.py build
+
+  # ============================================================================
+  # Job 2: Host unit tests
+  # Compiles echem_core sources with host GCC (no ESP32 toolchain).
+  # Catches any accidental esp_*/FreeRTOS includes in echem_core (would break here).
+  # Fetches Unity test framework from GitHub (internet access required in runners).
+  # ============================================================================
+  host-tests:
+    name: Host Unit Tests (echem_core, Ubuntu GCC)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install CMake and GCC
+        run: sudo apt-get install -y cmake build-essential
+
+      - name: Configure (fetches Unity via FetchContent)
+        run: cmake -B build_host host_test
+
+      - name: Build test executables
+        run: cmake --build build_host
+
+      - name: Run tests
+        run: ctest --test-dir build_host --output-on-failure
+
+      - name: Verify echem_core purity (no esp_*/FreeRTOS headers)
+        run: |
+          echo "=== Checking echem_core for forbidden includes ==="
+          if grep -r "esp_" components/echem_core/include components/echem_core/src; then
+            echo "FAIL: esp_* found in echem_core — breaks host testability invariant"
+            exit 1
+          fi
+          if grep -r "freertos" components/echem_core/include components/echem_core/src; then
+            echo "FAIL: freertos found in echem_core — breaks host testability invariant"
+            exit 1
+          fi
+          echo "PASS: echem_core is clean (no esp_*/FreeRTOS dependencies)"

@@ -1,0 +1,10 @@
+# uBIOPOT custom partition table — 4 MB flash
+# factory  ~1500 KB  main application
+# littlefs ~1000 KB  web assets (SPA, gzipped) + saved CSV exports
+# nvs        24 KB   calibration, WiFi creds, settings (NVS key-value store)
+#
+# Name,     Type,  SubType,  Offset,   Size,   Flags
+nvs,        data,  nvs,      0x9000,   0x6000,
+phy_init,   data,  phy,      0xf000,   0x1000,
+factory,    app,   factory,  0x10000,  1500K,
+littlefs,   data,  spiffs,   ,         1000K,

@@ -1,0 +1,172 @@
+menu "uBIOPOT Hardware Configuration"
+
+    menu "TFT Display — ILI9341 on SPI2_HOST (HSPI)"
+        comment "Pins confirmed from physical board header labels (2026-07-01)."
+        comment "RST tied to ESP32 EN (software reset via SPI cmd 0x01 — no GPIO needed)."
+        comment "MISO not connected (write-only panel). Backlight hardwired to 3V3 (always on)."
+
+        config UBIOPOT_TFT_SCLK
+            int "TFT SCLK GPIO"
+            default 15
+            help
+                SPI clock for ILI9341. GPIO15 (HSPI CLK). Strapping pin MTDO — must be HIGH at
+                boot (internal pull-up ensures this; no external pull needed).
+
+        config UBIOPOT_TFT_MOSI
+            int "TFT MOSI GPIO"
+            default 2
+            help
+                SPI MOSI for ILI9341. GPIO2. Strapping pin — must be LOW/floating at boot
+                (internal pull-down). Also doubles as the onboard blue LED on DevKit boards
+                (flickers during SPI writes — cosmetic only, not a fault).
+
+        config UBIOPOT_TFT_CS
+            int "TFT Chip Select GPIO"
+            default 5
+            help
+                SPI CS for ILI9341. GPIO5. Strapping pin — must be HIGH at boot (idles HIGH
+                as a CS line, so no bodge needed). Emits a PWM-like glitch at boot — harmless
+                for the display since it's deselected during init.
+
+        config UBIOPOT_TFT_DC
+            int "TFT Data/Command GPIO"
+            default 4
+            help
+                Data/Command select for ILI9341. GPIO4.
+
+        config UBIOPOT_TFT_PCLK_HZ
+            int "TFT SPI pixel clock (Hz)"
+            default 40000000
+            help
+                40 MHz is safe for ILI9341 on short PCB traces. Reduce to 20000000 if
+                display corruption appears on the bench.
+    endmenu
+
+    menu "MCP4921 DAC — SPI3_HOST (VSPI)"
+        comment "12-bit SPI DAC. SPI word: 0x3000 | (code & 0x0FFF) [BUF=0, GA=1x, SHDN=active]."
+
+        config UBIOPOT_DAC_SCK
+            int "DAC SCK GPIO"
+            default 18
+
+        config UBIOPOT_DAC_MOSI
+            int "DAC MOSI GPIO"
+            default 23
+
+        config UBIOPOT_DAC_CS
+            int "DAC CS GPIO"
+            default 26
+    endmenu
+
+    menu "ADS1115 ADC — I2C"
+        comment "16-bit ADC. ADDR pin tied to GND => address 0x48. GAIN_ONE (±4.096 V, 0.125 mV/bit)."
+        comment "AIN0 = VOUT_UC (cell voltage), AIN1 = IOUT_UC (current, continuous hot-path)."
+
+        config UBIOPOT_ADC_SDA
+            int "ADS1115 SDA GPIO"
+            default 21
+
+        config UBIOPOT_ADC_SCL
+            int "ADS1115 SCL GPIO"
+            default 22
+
+        config UBIOPOT_ADC_I2C_FREQ_HZ
+            int "I2C frequency (Hz)"
+            default 400000
+            help
+                400 kHz (Fast Mode). ADS1115 supports up to 400 kHz.
+    endmenu
+
+    menu "CD4066 Electrode Multiplexer"
+        comment "One pin HIGH at a time. All three LOW = all electrodes disconnected."
+
+        config UBIOPOT_MUX_T1
+            int "Electrode 1 GPIO (T1)"
+            default 32
+
+        config UBIOPOT_MUX_T2
+            int "Electrode 2 GPIO (T2)"
+            default 25
+
+        config UBIOPOT_MUX_T3
+            int "Electrode 3 GPIO (T3)"
+            default 33
+    endmenu
+
+    menu "Buttons"
+        config UBIOPOT_BTN_START
+            int "Start/Select Button GPIO"
+            default 14
+            help
+                Primary button (GPIO14). Active-low, INPUT_PULLUP.
+                Short press = select/confirm/start. Long press (during scan) = abort.
+
+        config UBIOPOT_BTN_NAV
+            int "Nav/Back/Factory-Reset Button GPIO"
+            default 0
+            help
+                Secondary button (GPIO0). Active-low.
+                Short press = navigate / cycle focus (LVGL encoder rotate+1).
+                Long hold (>=10 s) = factory-reset WiFi credentials (NVS erase).
+                STRAPPING PIN (BOOT): must be HIGH at power-on. Do NOT hold this button
+                during reset or boot — it will enter flash-download mode.
+    endmenu
+
+    menu "Status LEDs"
+        config UBIOPOT_LED_READY
+            int "Ready LED GPIO"
+            default 12
+            help
+                ON = device idle, ready for measurement.
+                STRAPPING PIN (GPIO12 / MTDI / VDD_SDIO): sampled at reset to set flash
+                voltage. Must NOT be driven HIGH at the moment of reset. The LED-to-GND
+                wiring idles LOW so normal operation is safe — just avoid driving it
+                HIGH in app_main before any reset or watchdog trigger.
+
+        config UBIOPOT_LED_PROCESSING
+            int "Processing LED GPIO"
+            default 13
+            help
+                ON = measurement in progress.
+    endmenu
+
+    menu "WiFi Defaults"
+        comment "Overridable at runtime via NVS. Credentials are stored in NVS — never in source."
+
+        config UBIOPOT_WIFI_AP_SSID_PREFIX
+            string "SoftAP SSID prefix"
+            default "uBIOPOT"
+            help
+                Device appends last 4 hex digits of MAC. Example: uBIOPOT-A1B2.
+                This SSID is shown on the TFT QR code and Settings screen.
+
+        config UBIOPOT_WIFI_AP_PASSWORD
+            string "SoftAP default password"
+            default "ubiopot123"
+            help
+                Default WPA2 password. Override via POST /api/wifi or NVS.
+                Embedded in the WiFi-join QR code shown on the TFT.
+
+        config UBIOPOT_WIFI_AP_MAX_CONN
+            int "SoftAP maximum simultaneous clients"
+            default 4
+
+        config UBIOPOT_MDNS_HOSTNAME
+            string "mDNS hostname"
+            default "ubiopot"
+            help
+                Device is reachable as <hostname>.local when in STA mode.
+                Example: ubiopot.local (requires mDNS-compatible network).
+    endmenu
+
+    menu "Serial Protocol"
+        config UBIOPOT_SERIAL_BAUD
+            int "UART0 baud rate (bps)"
+            default 115200
+            help
+                115200 is the default (matches ESP32 ROM bootloader baud; universal
+                CP2102/CH340 compatibility). Power users may increase to 230400 or
+                460800 for future high-rate techniques.
+    endmenu
+
+endmenu

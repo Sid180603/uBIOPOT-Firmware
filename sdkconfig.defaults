@@ -1,0 +1,22 @@
+# uBIOPOT sdkconfig.defaults — committed; drives idf.py configuration defaults.
+# The generated `sdkconfig` is git-ignored (never commit sdkconfig itself).
+# To regenerate: idf.py reconfigure
+
+# ---- Flash ----
+CONFIG_ESPTOOLPY_FLASHSIZE="4MB"
+
+# ---- Partition table ----
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# ---- FreeRTOS: dual-core (unicore = OFF for SMP, Core0=WiFi/UI, Core1=acquisition) ----
+CONFIG_FREERTOS_UNICORE=n
+
+# ---- HTTP server: WebSocket support required for P5 ----
+CONFIG_HTTPD_WS_SUPPORT=y
+
+# ---- Default log level: WARN (overridden at runtime in P7 via esp_log_level_set) ----
+CONFIG_LOG_DEFAULT_LEVEL_WARN=y
+
+# ---- Main task stack (bytes) — bumped from default 3584 ----
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=4096

@@ -1,0 +1,59 @@
+# ESP-IDF build artifacts
+build/
+sdkconfig
+sdkconfig.old
+managed_components/
+
+# Binary outputs (generated; not source)
+*.bin
+*.elf
+*.map
+
+# Host test build directories
+build_host/
+host_test/build/
+host_test/build_*/
+
+# Web build output (source lives in web/; gzipped LittleFS image is not committed)
+web/dist/
+web/node_modules/
+web/.vite/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+dist/
+
+# Security: NEVER commit secrets or credentials
+*.env
+.env.*
+*token*.json
+*token*.txt
+*.pem
+*.key
+*secret*
+*credential*
+*password*.txt
+
+# Chat/session transcript dumps — safety net against accidental inclusion
+# (these live in the parent ST Thesis/ folder, NOT this repo, but guard anyway)
+*chat*.md
+*Chat*.md
+*dump*.md
+*Dump*.md
+*transcript*.md
+Claude*.md
+cHAT*.md
+
+# IDE / OS
+.vscode/settings.json
+.vscode/launch.json
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db

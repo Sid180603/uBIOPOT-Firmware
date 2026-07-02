@@ -15,6 +15,14 @@ CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 # ---- FreeRTOS: dual-core (unicore = OFF for SMP, Core0=WiFi/UI, Core1=acquisition) ----
 CONFIG_FREERTOS_UNICORE=n
 
+# ---- FreeRTOS tick rate: 1000 Hz = 1 ms resolution ----
+# Default is 100 Hz (10 ms/tick), which makes pdMS_TO_TICKS(2) = 0 (a no-op taskYIELD).
+# ADS1115 averaging needs real 2 ms inter-sample gaps (1.7 conversion periods @860 SPS)
+# to read independent samples. Without this, pstat_adc_read_current_uA averages
+# identical values and gets zero noise reduction.
+# 1000 Hz is standard practice for timing-sensitive ESP32 applications.
+CONFIG_FREERTOS_HZ=1000
+
 # ---- HTTP server: WebSocket support required for P5 ----
 CONFIG_HTTPD_WS_SUPPORT=y
 

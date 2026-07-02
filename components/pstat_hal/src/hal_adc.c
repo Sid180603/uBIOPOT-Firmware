@@ -173,8 +173,19 @@ float pstat_adc_read_current_uA(uint8_t n_avg, const pstat_calib_t *cal)
 
     if (valid == 0) return 0.0f;
 
+    /*
+     * Keep the float average intact — do NOT cast to int16_t.
+     * Casting would truncate the fractional part (e.g. 15960.4 → 15960),
+     * discarding the sub-LSB information that n_avg averaging provides.
+     * With n_avg=5 we get ~2.2× noise reduction (sqrt(5)); truncation
+     * reduces that to near-zero benefit (±125 nA lost for Rf=1 kΩ).
+     *
+     * Inline the raw→volt conversion to stay in float throughout:
+     *   vout = avg_raw * adc_lsb_uv * 1e-6  (same as calib_adc_raw_to_volt
+     *          but operating on float avg_raw, not a truncated int16_t)
+     */
     float avg_raw = (float)sum / (float)valid;
-    float vout    = calib_adc_raw_to_volt((int16_t)avg_raw, cal);
+    float vout    = avg_raw * (cal->adc_lsb_uv * 1.0e-6f);
     return calib_vout_to_current_uA(vout, cal);
 }
 

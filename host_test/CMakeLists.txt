@@ -31,6 +31,7 @@ set(ECHEM_CORE_SRCS
     "${ECHEM_CORE_DIR}/src/dpv.c"
     "${ECHEM_CORE_DIR}/src/peaks.c"
     "${ECHEM_CORE_DIR}/src/protocol.c"
+    "${ECHEM_CORE_DIR}/src/scan_state.c"
     "${ECHEM_CORE_DIR}/src/technique.c"
 )
 
@@ -54,3 +55,4 @@ add_unity_test(test_calibration  test_calibration.c)
 add_unity_test(test_dpv          test_dpv.c)
 add_unity_test(test_protocol     test_protocol.c)
 add_unity_test(test_peaks        test_peaks.c)
+add_unity_test(test_scan_state   test_scan_state.c)

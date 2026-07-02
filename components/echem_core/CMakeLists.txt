@@ -9,6 +9,7 @@ idf_component_register(
         "src/dpv.c"
         "src/peaks.c"
         "src/protocol.c"
+        "src/scan_state.c"
         "src/technique.c"
     INCLUDE_DIRS "include"
     ## NO REQUIRES — only standard C library (newlib), automatically available.

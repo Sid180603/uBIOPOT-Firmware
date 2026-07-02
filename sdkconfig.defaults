@@ -3,7 +3,10 @@
 # To regenerate: idf.py reconfigure
 
 # ---- Flash ----
-CONFIG_ESPTOOLPY_FLASHSIZE="4MB"
+# Use the choice bool, NOT the derived string CONFIG_ESPTOOLPY_FLASHSIZE="4MB".
+# In ESP-IDF Kconfig, setting the choice item (FLASHSIZE_4MB=y) is what drives
+# the flash-size selection; the string is auto-derived from whichever choice is set.
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
 
 # ---- Partition table ----
 CONFIG_PARTITION_TABLE_CUSTOM=y

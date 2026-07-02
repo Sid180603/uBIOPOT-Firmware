@@ -169,4 +169,15 @@ menu "uBIOPOT Hardware Configuration"
                 460800 for future high-rate techniques.
     endmenu
 
+    menu "Development / Debug"
+        config UBIOPOT_SELFTEST_MODE
+            bool "Run HAL self-test at boot (P1 bringup mode)"
+            default n
+            help
+                When enabled, app_main runs pstat_hal_selftest() immediately after
+                initialising all HAL subsystems, then halts.
+                Bringup sequence: DAC ramp, ADC reads, mux cycle, LED blink,
+                button wait (10 s). Disable for normal firmware operation.
+    endmenu
+
 endmenu

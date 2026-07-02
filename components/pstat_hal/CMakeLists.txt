@@ -9,11 +9,14 @@ idf_component_register(
         "src/hal_adc.c"
         "src/hal_mux.c"
         "src/hal_io.c"
+        "src/hal_callbacks.c"
     INCLUDE_DIRS "include"
     REQUIRES echem_core
     PRIV_REQUIRES
         esp_driver_spi
         esp_driver_i2c
         esp_driver_gpio
+        freertos
         log
+        espressif__button
 )

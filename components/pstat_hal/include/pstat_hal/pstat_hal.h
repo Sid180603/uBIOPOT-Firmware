@@ -152,6 +152,39 @@ esp_err_t pstat_button_nav_on_factory_reset(pstat_button_cb_t cb, void *arg);
  */
 esp_err_t pstat_hal_selftest(const pstat_calib_t *cal);
 
+/* ==========================================================================
+ * Convenience init (calls all HAL init functions in order)
+ * ========================================================================== */
+
+/**
+ * @brief  Initialise all HAL subsystems: DAC → ADC → mux → LEDs → buttons.
+ *         Call once at boot before any other pstat_* function.
+ * @return ESP_OK if all subsystems initialise; first error code otherwise.
+ */
+esp_err_t pstat_hal_init_all(void);
+
+/* ==========================================================================
+ * Dependency-injection: bind HAL functions to echem_core hal_callbacks_t
+ * ========================================================================== */
+
+/**
+ * @brief  Build a hal_callbacks_t struct wired to the real HAL functions.
+ *
+ * The algorithm (dpv_run etc.) calls ONLY the callbacks — it never calls
+ * pstat_* functions directly. This is the DI seam that keeps echem_core
+ * hardware-free and host-testable.
+ *
+ * @param  cal  Calibration constants (pstat_calib_t) used by the callbacks.
+ *              Pointer must remain valid for the lifetime of the returned struct.
+ * @return      hal_callbacks_t with set_voltage, read_current_uA, read_cell_volt,
+ *              delay_ms bound; emit_point and check_abort are NULL (wired by
+ *              acq_engine in P3).
+ *
+ * Compile-time note: this function will not compile if HAL function signatures
+ * mismatch hal_callbacks_t typedefs — that IS the intended compile check.
+ */
+hal_callbacks_t pstat_make_hal_callbacks(pstat_calib_t *cal);
+
 #ifdef __cplusplus
 }
 #endif

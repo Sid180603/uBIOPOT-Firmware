@@ -12,7 +12,7 @@
  *
  * P2 algorithm tests (added here):
  *   - Mock HAL records every call for post-run assertion
- *   - Step count = ceil((e_end - e_begin) / e_step) * cycles
+ *   - Step count = floor(span / e_step) + 1 (endpoint inclusive) * cycles
  *   - set_voltage() called base then pulse each step (correct interleaving)
  *   - emit_point() called once per step (dI = I_pulse - I_base)
  *   - abort stops within one step (< 1 step latency)
@@ -336,13 +336,13 @@ static int run_dpv(dpv_params_t *p, mock_ctx_t *m)
 /* ==============================================================================
  * Step count tests
  *
- * Expected steps per cycle = ceil((e_end - e_begin) / e_step).
+ * Expected steps per cycle = floor(span / e_step) + 1 (endpoint inclusive).
  * Total emit_point calls = steps_per_cycle * cycles.
  * ============================================================================== */
 
 void test_dpv_step_count_simple(void)
 {
-    /* -500 â†’ +500 mV, step 100 mV â†’ 10 steps */
+    /* -500 → +500 mV, step 100 mV → floor(1000/100)+1 = 11 steps (includes +500 endpoint) */
     dpv_params_t p = DPV_PARAMS_DEFAULT;
     p.e_begin_mV         = -500.0f;
     p.e_end_mV           =  500.0f;
@@ -358,12 +358,12 @@ void test_dpv_step_count_simple(void)
 
     int rc = run_dpv(&p, &m);
     TEST_ASSERT_EQUAL_INT(0, rc);
-    TEST_ASSERT_EQUAL_INT(10, m.n_points);
+    TEST_ASSERT_EQUAL_INT(11, m.n_points);
 }
 
 void test_dpv_step_count_with_two_cycles(void)
 {
-    /* 0 â†’ 400 mV, step 100 mV â†’ 4 steps; cycles=3 â†’ 12 total */
+    /* 0 → 400 mV, step 100 mV → floor(400/100)+1 = 5 steps; cycles=3 → 15 total */
     dpv_params_t p = DPV_PARAMS_DEFAULT;
     p.e_begin_mV         =    0.0f;
     p.e_end_mV           =  400.0f;
@@ -379,12 +379,12 @@ void test_dpv_step_count_with_two_cycles(void)
 
     int rc = run_dpv(&p, &m);
     TEST_ASSERT_EQUAL_INT(0, rc);
-    TEST_ASSERT_EQUAL_INT(12, m.n_points);
+    TEST_ASSERT_EQUAL_INT(15, m.n_points);
 }
 
 void test_dpv_step_count_cathodic_scan(void)
 {
-    /* 500 â†’ -500 mV (cathodic), step 100 mV â†’ 10 steps */
+    /* 500 → -500 mV (cathodic), step 100 mV → floor(1000/100)+1 = 11 steps */
     dpv_params_t p = DPV_PARAMS_DEFAULT;
     p.e_begin_mV         =  500.0f;
     p.e_end_mV           = -500.0f;
@@ -400,7 +400,7 @@ void test_dpv_step_count_cathodic_scan(void)
 
     int rc = run_dpv(&p, &m);
     TEST_ASSERT_EQUAL_INT(0, rc);
-    TEST_ASSERT_EQUAL_INT(10, m.n_points);
+    TEST_ASSERT_EQUAL_INT(11, m.n_points);
 }
 
 /* ==============================================================================
@@ -414,7 +414,7 @@ void test_dpv_step_count_cathodic_scan(void)
 
 void test_dpv_voltage_sequence_base_then_pulse(void)
 {
-    /* 2 steps: 0â†’100 mV, step=50 mV, pulse=20 mV */
+    /* 0->100 mV, step=50 mV -> floor(100/50)+1 = 3 steps at 0, 50, 100 mV; pulse=20 mV */
     dpv_params_t p = DPV_PARAMS_DEFAULT;
     p.e_begin_mV         =   0.0f;
     p.e_end_mV           = 100.0f;
@@ -431,15 +431,11 @@ void test_dpv_voltage_sequence_base_then_pulse(void)
 
     run_dpv(&p, &m);
 
-    /* Equilibration: voltages[0] = 0 mV (e_begin) */
-    /* Step 1: voltages[1]=0 mV base, voltages[2]=20 mV pulse */
-    /* Step 2: voltages[3]=50 mV base, voltages[4]=70 mV pulse (or clamped) */
-    TEST_ASSERT_EQUAL_INT(2, m.n_points); /* 2 steps */
-
-    /* First voltage after equilibration = e_begin = base of step 1 */
-    TEST_ASSERT_FLOAT_WITHIN(1.0f, 0.0f, m.voltages[1]); /* base step 1 */
-    TEST_ASSERT_FLOAT_WITHIN(1.0f, 20.0f, m.voltages[2]); /* pulse step 1 */
-    TEST_ASSERT_FLOAT_WITHIN(1.0f, 50.0f, m.voltages[3]); /* base step 2 */
+    TEST_ASSERT_EQUAL_INT(3, m.n_points); /* 3 steps including endpoint */
+    TEST_ASSERT_FLOAT_WITHIN(1.0f,   0.0f, m.voltages[1]); /* base step 0 */
+    TEST_ASSERT_FLOAT_WITHIN(1.0f,  20.0f, m.voltages[2]); /* pulse step 0 */
+    TEST_ASSERT_FLOAT_WITHIN(1.0f,  50.0f, m.voltages[3]); /* base step 1 */
+    TEST_ASSERT_FLOAT_WITHIN(1.0f, 100.0f, m.voltages[5]); /* base step 2 = e_end */
 }
 
 /* ==============================================================================
@@ -472,7 +468,7 @@ void test_dpv_di_equals_pulse_minus_base(void)
     dpv_params_t p = DPV_PARAMS_DEFAULT;
     p.e_begin_mV         =   0.0f;
     p.e_end_mV           = 100.0f;
-    p.e_step_mV          = 100.0f; /* 1 step */
+    p.e_step_mV          = 100.0f; /* floor(100/100)+1 = 2 steps at 0 and 100 mV */
     p.t_equilibration_ms =   0;
     p.cycles             =   1;
     p.n_avg              =   1;
@@ -487,7 +483,7 @@ void test_dpv_di_equals_pulse_minus_base(void)
 
     run_dpv(&p, &m);
 
-    TEST_ASSERT_EQUAL_INT(1, m.n_points);
+    TEST_ASSERT_EQUAL_INT(2, m.n_points); /* 2 steps */
     /* dI = pulse - baseline = 15 - 5 = 10 ÂµA */
     TEST_ASSERT_FLOAT_WITHIN(0.5f, 10.0f, m.points[0].I_uA);
 }

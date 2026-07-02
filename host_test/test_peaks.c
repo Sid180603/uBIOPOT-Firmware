@@ -36,7 +36,7 @@ void test_single_peak_found(void)
     float E[10]; fill_e(E, 10, -450.0f, 100.0f); /* -450 to +450 mV */
 
     peak_t out[4];
-    uint16_t n = peaks_find(I, E, 11, out, 4, 5.0f); /* threshold 5 uA; i=9 (prominence=1) filtered out */
+    uint16_t n = peaks_find(I, E, 10, out, 4, 5.0f); /* 10 elements; i=8 is last interior point */
 
     TEST_ASSERT_EQUAL_UINT16(1, n);
     TEST_ASSERT_EQUAL_UINT16(5, out[0].index);

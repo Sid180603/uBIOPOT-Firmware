@@ -114,9 +114,11 @@ static int dpv_run(const technique_params_t *params,
     /* ------------------------------------------------------------------ */
     for (uint8_t cycle = 0; cycle < p->cycles; cycle++) {
 
-        /* Number of steps: ceil(|e_end - e_begin| / e_step). */
+        /* Number of steps: floor(span/e_step) + 1 so the endpoint is included
+         * when span is exactly divisible by e_step (PalmSens/Autolab convention).
+         * For non-exact spans both ceil and floor+1 give the same result. */
         float span  = (p->e_end_mV - p->e_begin_mV) * sign; /* always ≥ 0 */
-        int   steps = (int)ceilf(span / p->e_step_mV);
+        int   steps = (int)floorf(span / p->e_step_mV) + 1;
         if (steps <= 0) steps = 1; /* degenerate: at least one sample */
 
         for (int s = 0; s < steps; s++) {

@@ -31,3 +31,19 @@ CONFIG_LOG_DEFAULT_LEVEL_WARN=y
 
 # ---- Main task stack (bytes) — bumped from default 3584 ----
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=4096
+
+# ---- LVGL9 configuration (P4) ----
+# Use FreeRTOS for LVGL thread safety (mutex + task notification).
+# LVGL task will be pinned to Core 0 in ui_tft_start() to avoid Core 1 (acquisition).
+CONFIG_LV_OS_FREERTOS=y
+
+# Montserrat fonts: 14pt (hint bar / small UI), 20pt (labels/values), 28pt (big peak display).
+CONFIG_LV_FONT_MONTSERRAT_14=y
+CONFIG_LV_FONT_MONTSERRAT_20=y
+CONFIG_LV_FONT_MONTSERRAT_28=y
+# Default LVGL font = Montserrat 14.
+CONFIG_LV_FONT_DEFAULT_MONTSERRAT_14=y
+
+# Color depth: 16-bit RGB565 to match ILI9341 panel.
+# This is the Kconfig default but stated explicitly for clarity.
+CONFIG_LV_COLOR_DEPTH_16=y

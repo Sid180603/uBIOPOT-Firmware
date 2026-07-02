@@ -115,10 +115,42 @@ esp_err_t pstat_button_start_on_click(pstat_button_cb_t cb, void *arg)
                                   (button_cb_t)cb, arg);
 }
 
+esp_err_t pstat_button_start_on_press_down(pstat_button_cb_t cb, void *arg)
+{
+    if (!s_btn_start) return ESP_ERR_INVALID_STATE;
+    return iot_button_register_cb(s_btn_start, BUTTON_PRESS_DOWN, NULL,
+                                  (button_cb_t)cb, arg);
+}
+
+esp_err_t pstat_button_start_on_press_up(pstat_button_cb_t cb, void *arg)
+{
+    if (!s_btn_start) return ESP_ERR_INVALID_STATE;
+    return iot_button_register_cb(s_btn_start, BUTTON_PRESS_UP, NULL,
+                                  (button_cb_t)cb, arg);
+}
+
+esp_err_t pstat_button_start_on_long_press(pstat_button_cb_t cb, void *arg)
+{
+    if (!s_btn_start) return ESP_ERR_INVALID_STATE;
+    /* Fires once when 2 s threshold reached (long_press_time = 2000 ms set in pstat_buttons_init). */
+    button_event_args_t event_args = {
+        .long_press.press_time = 2000,
+    };
+    return iot_button_register_cb(s_btn_start, BUTTON_LONG_PRESS_START, &event_args,
+                                  (button_cb_t)cb, arg);
+}
+
 esp_err_t pstat_button_nav_on_click(pstat_button_cb_t cb, void *arg)
 {
     if (!s_btn_nav) return ESP_ERR_INVALID_STATE;
     return iot_button_register_cb(s_btn_nav, BUTTON_SINGLE_CLICK, NULL,
+                                  (button_cb_t)cb, arg);
+}
+
+esp_err_t pstat_button_nav_on_press_down(pstat_button_cb_t cb, void *arg)
+{
+    if (!s_btn_nav) return ESP_ERR_INVALID_STATE;
+    return iot_button_register_cb(s_btn_nav, BUTTON_PRESS_DOWN, NULL,
                                   (button_cb_t)cb, arg);
 }
 

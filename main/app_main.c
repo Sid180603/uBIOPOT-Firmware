@@ -6,6 +6,7 @@
 #include "echem_core/calibration.h"
 #include "echem_core/technique.h"
 #include "acq_engine.h"
+#include "ui_tft.h"
 
 static const char *TAG = "ubiopot";
 
@@ -57,10 +58,17 @@ void app_main(void)
     /*
      * Remaining startup (filled in phase by phase):
      * P8: settings_load(&s_cal) -- load calibration + WiFi creds from NVS
-     * P4: ui_tft_start()        -- init ILI9341 + LVGL + 2-button encoder nav
+     * P4: ui_tft_start()        -- init ILI9341 + LVGL + 2-button encoder nav  ← DONE
      * P5: net_comms_start()     -- WiFi APSTA + captive portal + mDNS + HTTP + WebSocket
      * P7: serial_comms_start()  -- UART0 NDJSON sink + RX command task
      */
+
+    /* ---- P4: on-device TFT UI (ILI9341 + LVGL + encoder + engine sink) ---- */
+    ret = ui_tft_start();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "ui_tft_start FAILED: %s -- display will be blank", esp_err_to_name(ret));
+        /* Non-fatal: device still runs scans via serial/WiFi (P5/P7) */
+    }
 
     for (;;) {
         vTaskDelay(pdMS_TO_TICKS(1000));

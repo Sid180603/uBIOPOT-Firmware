@@ -130,10 +130,36 @@ esp_err_t pstat_buttons_init(void);
 esp_err_t pstat_button_start_on_click(pstat_button_cb_t cb, void *arg);
 
 /**
+ * @brief  Register a PRESS-DOWN callback on the START button (GPIO14).
+ *         Fires immediately when the button is physically pressed.
+ *         Used by the LVGL encoder indev to signal "enter pressed".
+ */
+esp_err_t pstat_button_start_on_press_down(pstat_button_cb_t cb, void *arg);
+
+/**
+ * @brief  Register a PRESS-UP callback on the START button (GPIO14).
+ *         Fires when the button is physically released.
+ *         Used by the LVGL encoder indev to signal "enter released".
+ */
+esp_err_t pstat_button_start_on_press_up(pstat_button_cb_t cb, void *arg);
+
+/**
+ * @brief  Register a long-press (≥2 s) callback on the START button (GPIO14).
+ *         Used to abort a running scan from on-device UI (P4).
+ */
+esp_err_t pstat_button_start_on_long_press(pstat_button_cb_t cb, void *arg);
+
+/**
  * @brief  Register a short-click callback on the NAV button (GPIO0).
  *         Used by the LVGL encoder indev: short press = rotate focus (navigate).
  */
 esp_err_t pstat_button_nav_on_click(pstat_button_cb_t cb, void *arg);
+
+/**
+ * @brief  Register a PRESS-DOWN callback on the NAV button (GPIO0).
+ *         Fires immediately on press. Used by LVGL encoder indev for rotation.
+ */
+esp_err_t pstat_button_nav_on_press_down(pstat_button_cb_t cb, void *arg);
 
 /**
  * @brief  Register a long-hold (≥10 s) callback on the NAV button (GPIO0).

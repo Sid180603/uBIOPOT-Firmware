@@ -17,6 +17,7 @@
 
 #include "lvgl.h"
 #include "screens/screen_mgr.h"
+#include "echem_core/scan_state.h"  /* scan_state_t */
 
 #include <stdio.h>
 #include <math.h>
@@ -112,6 +113,12 @@ void engine_abort(void)
 
 /* pstat_led_set stub */
 void pstat_led_set(int led, int on) { (void)led; (void)on; }
+
+/* engine_get_state stub */
+scan_state_t engine_get_state(void)
+{
+    return s_scanning ? SCAN_STATE_RUNNING : SCAN_STATE_IDLE;
+}
 
 /* -------------------------------------------------------------------------
  * Simulator main entry point

@@ -8,11 +8,11 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-/* Minimal type + macro stubs so scr_scan.c compiles without FreeRTOS */
+/* Minimal type + macro stubs so scr_scan.c compiles without FreeRTOS.
+ * SemaphoreHandle_t is defined in semphr.h — do NOT redeclare it here. */
 #define pdTRUE  1
 #define pdFALSE 0
 #define portMAX_DELAY 0xffffffffUL
-typedef void* SemaphoreHandle_t;
 
 /* FreeRTOS.h normally pulls in semphr.h via portmacro — replicate that here */
 #include "semphr.h"

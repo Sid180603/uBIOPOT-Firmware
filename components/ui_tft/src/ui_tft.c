@@ -222,7 +222,9 @@ static void sink_on_resync(const DataPoint *buf, uint16_t count,
 {
     (void)ctx;
 
-    if (!lvgl_port_lock(50)) return;
+    /* Block indefinitely — resync is called once at startup; a failed acquire
+     * would leave the chart blank with no retry, silently losing the replay. */
+    if (!lvgl_port_lock(0)) return;
 
     if (count == 0 || buf == NULL) {
         lvgl_port_unlock();

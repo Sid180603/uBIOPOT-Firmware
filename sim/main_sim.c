@@ -37,6 +37,7 @@
 #include "echem_core/scan_state.h"
 #include "echem_core/dpv.h"
 #include "echem_core/peaks.h"
+#include "pstat_hal/pstat_hal.h"  /* for esp_err_t pstat_led_set(pstat_led_t, bool) */
 
 /* =========================================================================
  * Synthetic DPV scan — Pb²⁺ peak at −400 mV, σ = 80 mV, ΔI_peak = 50 µA.
@@ -78,7 +79,7 @@ static void synthetic_scan_cb(lv_timer_t *t)
  * The linker resolves the same symbols that the screen code calls.
  * ========================================================================= */
 
-int engine_start(uint8_t electrode, const dpv_params_t *params)
+esp_err_t engine_start(uint8_t electrode, const dpv_params_t *params)
 {
     (void)params;
     if (s_scanning) return -1;
@@ -111,8 +112,8 @@ scan_state_t engine_get_state(void)
     return s_scanning ? SCAN_STATE_RUNNING : SCAN_STATE_IDLE;
 }
 
-/* LED stub — no GPIO on PC */
-void pstat_led_set(int led, int on) { (void)led; (void)on; }
+/* LED stub — no GPIO on PC. Signature matches real pstat_hal declaration. */
+esp_err_t pstat_led_set(pstat_led_t led, bool on) { (void)led; (void)on; return 0; }
 
 /* =========================================================================
  * main — mirrors original src/main.c structure exactly.

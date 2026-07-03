@@ -118,21 +118,17 @@ All screen layout and animation work happens on the PC **before** flashing — r
 
 ```
 sim/
-  lv_conf.h    — LVGL9 config matching firmware (depth 16, Montserrat 14/20/28)
-  main_sim.c   — SDL2 sim entry point with synthetic DPV Gaussian scan
-  README.md    — Windows setup instructions
+  lv_conf.h      — LVGL9 config for PC (LV_STDLIB_CLIB, depth-16, Montserrat 14/20/28)
+  main_sim.c     — Complete simulator entry point; mirrors original lv_port_pc_vscode/src/main.c
+  stubs/         — Lightweight IDF header replacements (esp_log, esp_err, acq_engine, freertos)
+  WSL_SETUP.md   — Full step-by-step build guide (verified on WSL2 Debian + WSLg)
+  README.md      — Overview
 ```
 
-See [`sim/README.md`](sim/README.md) for the full setup guide (`lv_port_pc_vscode` + SDL2 + CMake).
+See **[`sim/WSL_SETUP.md`](sim/WSL_SETUP.md)** for the complete, verified setup procedure.
 
-Quick start:
-```
-git clone --recursive https://github.com/lvgl/lv_port_pc_vscode
-# copy sim/lv_conf.h and sim/main_sim.c into the clone
-cmake -B build -G Ninja
-cmake --build build
-./build/lvgl_sdl          # opens 320×240 landscape window, full UI with synthetic scan
-```
+**Verified working (2026-07-03):** splash → home → scan-live → results flow, Tab/Enter/two-finger-scroll
+navigation, synthetic DPV Gaussian voltammogram (Pb²⁺ peak at −400 mV), toast on About.
 
 **What the sim proves:** screen layout, navigation flow, chart animation, transitions, fonts, colours.
 **What only the real board proves:** RGB565 byte-swap colour accuracy, 40 MHz SPI refresh smoothness,

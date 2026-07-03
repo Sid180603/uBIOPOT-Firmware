@@ -25,8 +25,9 @@ extern "C" {
 /**
  * Start a DPV scan on the given electrode.
  * Implemented as a synthetic scan in main_sim.c.
+ * Return type is esp_err_t (= int) to match the real firmware declaration.
  */
-int engine_start(uint8_t electrode, const dpv_params_t *params);
+esp_err_t engine_start(uint8_t electrode, const dpv_params_t *params);
 
 /** Abort a running scan. */
 void engine_abort(void);

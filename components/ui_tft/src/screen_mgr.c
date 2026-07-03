@@ -88,17 +88,24 @@ void screen_mgr_init(lv_display_t *disp, lv_indev_t *indev)
 static void load_screen(lv_obj_t *scr, lv_scr_load_anim_t anim)
 {
     if (!scr) return;
-    /* Switch the encoder indev to the group belonging to the new screen.
-     * This prevents lv_group_focus_next from targeting objects on a screen
-     * that is leaving — encoder focus is always scoped to the visible screen. */
-    if (s_indev) {
-        lv_group_t *g = NULL;
-        if      (scr == s_scr_home)     g = s_grp_home;
-        else if (scr == s_scr_scan)     g = s_grp_scan;
-        else if (scr == s_scr_results)  g = s_grp_results;
-        else if (scr == s_scr_settings) g = s_grp_settings;
-        else if (scr == s_scr_splash)   g = s_grp_splash;
-        if (g) lv_indev_set_group(s_indev, g);
+    /* Switch every non-pointer indev to the group for the incoming screen.
+     * - On firmware: updates the encoder indev (GPIO14/GPIO0).
+     * - On PC sim:   updates both the mousewheel encoder AND the SDL keyboard,
+     *                so Tab/Enter navigation works on every screen. */
+    lv_group_t *g = NULL;
+    if      (scr == s_scr_home)     g = s_grp_home;
+    else if (scr == s_scr_scan)     g = s_grp_scan;
+    else if (scr == s_scr_results)  g = s_grp_results;
+    else if (scr == s_scr_settings) g = s_grp_settings;
+    else if (scr == s_scr_splash)   g = s_grp_splash;
+
+    if (g) {
+        for (lv_indev_t *iv = lv_indev_get_next(NULL); iv != NULL;
+             iv = lv_indev_get_next(iv)) {
+            if (lv_indev_get_type(iv) != LV_INDEV_TYPE_POINTER) {
+                lv_indev_set_group(iv, g);
+            }
+        }
     }
     lv_scr_load_anim(scr, anim, 200, 0, false);
 }

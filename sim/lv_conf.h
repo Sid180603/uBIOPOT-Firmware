@@ -35,9 +35,10 @@
 /* ======================================================================
    STDLIB
    ====================================================================== */
-#define LV_USE_STDLIB_MALLOC    LV_STDLIB_BUILTIN
-#define LV_USE_STDLIB_STRING    LV_STDLIB_BUILTIN
-#define LV_USE_STDLIB_SPRINTF   LV_STDLIB_BUILTIN
+/* PC sim: use standard C malloc/free — no TLSF pool needed on the host. */
+#define LV_USE_STDLIB_MALLOC    LV_STDLIB_CLIB
+#define LV_USE_STDLIB_STRING    LV_STDLIB_CLIB
+#define LV_USE_STDLIB_SPRINTF   LV_STDLIB_CLIB
 
 #define LV_STDINT_INCLUDE   <stdint.h>
 #define LV_STDDEF_INCLUDE   <stddef.h>
@@ -46,15 +47,7 @@
 #define LV_LIMITS_INCLUDE   <limits.h>
 #define LV_STDARG_INCLUDE   <stdarg.h>
 
-#if LV_USE_STDLIB_MALLOC == LV_STDLIB_BUILTIN
-    /** 128 KB — generous for the PC sim (device uses ESP heap_caps). */
-    #define LV_MEM_SIZE          (128U * 1024U)
-    #define LV_MEM_POOL_EXPAND_SIZE 0
-    #define LV_MEM_ADR           0
-    #if LV_MEM_ADR == 0
-        #define LV_MEM_POOL_ALLOC
-    #endif
-#endif
+/* LV_STDLIB_CLIB uses malloc() directly — no pool config needed. */
 
 /* ======================================================================
    OS / THREADING

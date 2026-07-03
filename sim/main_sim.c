@@ -49,10 +49,15 @@ static int         s_step       = 0;
 static bool        s_scanning   = false;
 static lv_timer_t *s_scan_timer = NULL;
 
+/* ISSUE 1: store scan data so scr_results_set_curve() can draw mini voltammogram */
+#define SIM_SCAN_POINTS 200
+static float s_E_buf[SIM_SCAN_POINTS];
+static float s_I_buf[SIM_SCAN_POINTS];
+
 static void synthetic_scan_cb(lv_timer_t *t)
 {
     (void)t;
-    if (s_step >= 200) {
+    if (s_step >= SIM_SCAN_POINTS) {
         lv_timer_del(s_scan_timer);
         s_scan_timer = NULL;
         s_scanning   = false;
@@ -60,6 +65,8 @@ static void synthetic_scan_cb(lv_timer_t *t)
         /* Announce results — Pb²⁺ peak at −400 mV / 50 µA on electrode 1 */
         static peak_t peaks[1] = {{ .E_mV = -400.0f, .I_uA = 50.0f, .index = 80 }};
         scr_results_set(peaks, 1, /*electrode=*/1);
+        /* ISSUE 1 fix: supply raw curve data for the mini voltammogram */
+        scr_results_set_curve(s_E_buf, s_I_buf, (uint16_t)SIM_SCAN_POINTS);
         screen_mgr_goto_results();
         return;
     }
@@ -68,8 +75,11 @@ static void synthetic_scan_cb(lv_timer_t *t)
     float I = 50.0f * expf(-(E + 400.0f) * (E + 400.0f)
                            / (2.0f * 80.0f * 80.0f)); /* Gaussian at −400 mV */
 
+    s_E_buf[s_step] = E;   /* accumulate for set_curve */
+    s_I_buf[s_step] = I;
+
     scr_scan_push_point(E, I);
-    scr_scan_set_progress((uint16_t)(s_step + 1), 200);
+    scr_scan_set_progress((uint16_t)(s_step + 1), SIM_SCAN_POINTS);
     s_step++;
 }
 

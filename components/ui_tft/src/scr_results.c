@@ -310,8 +310,11 @@ void scr_results_set_curve(const float *E_mV, const float *I_uA, uint16_t n)
     }
     float e_rng = (e_max - e_min) * 0.1f;
     float i_rng = (i_max - i_min) * 0.1f;
-    if (e_rng < 1.0f) e_rng = 1.0f;
-    if (i_rng < 1.0f) i_rng = 1.0f;
+    /* BUG 6 fix: use sensible minimum ranges for DPV context.
+     * 1.0f guard gave a 2 mV / 2 µA axis on flat-line scans — unreadable.
+     * 50 mV / 5 µA gives at least a 100 mV / 10 µA visible window. */
+    if (e_rng < 50.0f) e_rng = 50.0f;
+    if (i_rng <  5.0f) i_rng =  5.0f;
     lv_chart_set_axis_range(s_mini_chart, LV_CHART_AXIS_PRIMARY_X,
                             (int32_t)(e_min - e_rng), (int32_t)(e_max + e_rng));
     lv_chart_set_axis_range(s_mini_chart, LV_CHART_AXIS_PRIMARY_Y,

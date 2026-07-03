@@ -132,5 +132,11 @@ lv_obj_t *scr_splash_create(lv_group_t *group)
 static void splash_timer_cb(lv_timer_t *t)
 {
     lv_timer_del(t);
-    screen_mgr_goto_home();
+    /* BUG 3 fix: only transition if splash is still the active screen.
+     * Prevents a stale timer from overriding navigation that happened
+     * while the animation was in flight (e.g. if splash is ever re-entered
+     * or the delay is shortened in future). */
+    if (lv_scr_act() == s_scr) {
+        screen_mgr_goto_home();
+    }
 }

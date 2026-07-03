@@ -59,6 +59,7 @@ static lv_obj_t  *s_lbl_elec     = NULL;  /* "E1  DPV" in status bar */
 static lv_obj_t  *s_lbl_progress = NULL;  /* "10/240" step count */
 static lv_obj_t  *s_lbl_elapsed  = NULL;  /* "M:SS" elapsed time (#13, replaces live V in bar) */
 static lv_obj_t  *s_lbl_live_i   = NULL;  /* live current display */
+static lv_obj_t  *s_lbl_live_e   = NULL;  /* live potential display (BUG 2 fix) */
 static lv_obj_t  *s_lbl_proc     = NULL;  /* "⊙ MEASURING" / "Equilibrating..." */
 static lv_obj_t  *s_chart        = NULL;
 static lv_chart_series_t *s_series[3];    /* one per electrode */
@@ -152,10 +153,15 @@ static void flush_timer_cb(lv_timer_t *t)
             lv_chart_set_axis_range(s_chart, LV_CHART_AXIS_PRIMARY_Y, s_y_min, s_y_max);
         }
 
-        /* Update live readouts */
+        /* Update live readouts (BUG 2: also update E label) */
         char ibuf[20];
         snprintf(ibuf, sizeof(ibuf), "%+.1f µA", (float)pt.I_uA);
         lv_label_set_text(s_lbl_live_i, ibuf);
+        if (s_lbl_live_e) {
+            char ebuf[16];
+            snprintf(ebuf, sizeof(ebuf), "%+.3fV", pt.E_mV / 1000.0f);
+            lv_label_set_text(s_lbl_live_e, ebuf);
+        }
         updated = true;
     }
 
@@ -177,6 +183,26 @@ static void elapsed_timer_cb(lv_timer_t *t)
     lv_label_set_text(s_lbl_elapsed, buf);
 }
 
+/* BUG 7 fix: stop the proc animation before the screen's objects are freed.
+ * lv_anim stores s_lbl_proc as a raw var pointer — if the screen is deleted
+ * while the animation is running, lv_anim_handler would call anim_set_opa()
+ * on the freed object. Registering LV_EVENT_DELETE ensures cleanup happens
+ * inside LVGL's own destruction sequence, before any memory is reclaimed. */
+static void scr_on_delete(lv_event_t *e)
+{
+    (void)e;
+    stop_proc_anim();
+    /* Null all static object pointers so stale-pointer bugs surface as
+     * clean NULL-dereference guard hits, not silent memory corruption. */
+    s_lbl_elec = s_lbl_progress = s_lbl_elapsed = NULL;
+    s_lbl_live_i = s_lbl_live_e = s_lbl_proc = NULL;
+    s_chart = s_spinner = NULL;
+    s_series[0] = s_series[1] = s_series[2] = NULL;
+    if (s_flush_timer)   { lv_timer_del(s_flush_timer);   s_flush_timer = NULL; }
+    if (s_elapsed_timer) { lv_timer_del(s_elapsed_timer); s_elapsed_timer = NULL; }
+    s_scr = NULL;
+}
+
 /* -------------------------------------------------------------------------
  * Public — create
  * ------------------------------------------------------------------------- */
@@ -189,6 +215,8 @@ lv_obj_t *scr_scan_create(lv_group_t *group)
     lv_obj_set_size(s_scr, LV_HOR_RES, LV_VER_RES);
     lv_obj_set_style_bg_color(s_scr, lv_color_hex(UI_COLOR_BG), 0);
     lv_obj_set_style_bg_opa(s_scr, LV_OPA_COVER, 0);
+    /* BUG 7: register delete handler so animation is stopped before free */
+    lv_obj_add_event_cb(s_scr, scr_on_delete, LV_EVENT_DELETE, NULL);
 
     /* ── Status bar ─────────────────────────────────────────────── */
     lv_obj_t *bar = lv_obj_create(s_scr);
@@ -259,7 +287,7 @@ lv_obj_t *scr_scan_create(lv_group_t *group)
 
     /* #9: Axis labels — inside chart corners, DIM color */
     lv_obj_t *ax_y = lv_label_create(s_scr);
-    lv_label_set_text(ax_y, "\u0394I (\u00b5A)");
+    lv_label_set_text(ax_y, "dI (uA)");  /* BUG 1: U+0394 Delta not in Montserrat; use ASCII */
     lv_obj_set_style_text_color(ax_y, lv_color_hex(UI_COLOR_DIM), 0);
     lv_obj_set_style_text_font(ax_y, &lv_font_montserrat_14, 0);
     lv_obj_set_pos(ax_y, 8, 30);   /* top-left corner inside chart */
@@ -307,11 +335,11 @@ lv_obj_t *scr_scan_create(lv_group_t *group)
     lv_obj_set_style_text_font(e_lbl_hdr, &lv_font_montserrat_14, 0);
     lv_obj_align(e_lbl_hdr, LV_ALIGN_CENTER, -24, 0);
 
-    lv_obj_t *lbl_live_e_row = lv_label_create(row);
-    lv_label_set_text(lbl_live_e_row, "+0.000V");
-    lv_obj_set_style_text_color(lbl_live_e_row, lv_color_hex(UI_COLOR_TEXT), 0);
-    lv_obj_set_style_text_font(lbl_live_e_row, &lv_font_montserrat_14, 0);
-    lv_obj_align(lbl_live_e_row, LV_ALIGN_CENTER, 10, 0);
+    s_lbl_live_e = lv_label_create(row);  /* BUG 2: was local, never updated */
+    lv_label_set_text(s_lbl_live_e, "+0.000V");
+    lv_obj_set_style_text_color(s_lbl_live_e, lv_color_hex(UI_COLOR_TEXT), 0);
+    lv_obj_set_style_text_font(s_lbl_live_e, &lv_font_montserrat_14, 0);
+    lv_obj_align(s_lbl_live_e, LV_ALIGN_CENTER, 10, 0);
 
     s_lbl_proc = lv_label_create(row);
     lv_label_set_text(s_lbl_proc, LV_SYMBOL_REFRESH "  MEASURING");

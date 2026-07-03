@@ -1,4 +1,4 @@
-menu "uBIOPOT Hardware Configuration"
+menu "Aqua-HMET Hardware Configuration"
 
     menu "TFT Display — ILI9341 on SPI2_HOST (HSPI)"
         comment "Pins confirmed from physical board header labels (2026-07-01)."
@@ -135,14 +135,14 @@ menu "uBIOPOT Hardware Configuration"
 
         config UBIOPOT_WIFI_AP_SSID_PREFIX
             string "SoftAP SSID prefix"
-            default "uBIOPOT"
+            default "Aqua-HMET"
             help
-                Device appends last 4 hex digits of MAC. Example: uBIOPOT-A1B2.
+                Device appends last 4 hex digits of MAC. Example: Aqua-HMET-A1B2.
                 This SSID is shown on the TFT QR code and Settings screen.
 
         config UBIOPOT_WIFI_AP_PASSWORD
             string "SoftAP default password"
-            default "ubiopot123"
+            default "aquahmet123"
             help
                 Default WPA2 password. Override via POST /api/wifi or NVS.
                 Embedded in the WiFi-join QR code shown on the TFT.
@@ -153,10 +153,10 @@ menu "uBIOPOT Hardware Configuration"
 
         config UBIOPOT_MDNS_HOSTNAME
             string "mDNS hostname"
-            default "ubiopot"
+            default "aquahmet"
             help
                 Device is reachable as <hostname>.local when in STA mode.
-                Example: ubiopot.local (requires mDNS-compatible network).
+                Example: aquahmet.local (requires mDNS-compatible network).
     endmenu
 
     menu "Serial Protocol"

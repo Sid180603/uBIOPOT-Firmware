@@ -81,8 +81,8 @@ int protocol_format_hello(char *buf, size_t buf_len)
 {
     int n = snprintf(buf, buf_len,
         "{\"t\":\"hello\",\"fw\":\"%s\",\"proto\":%d}\n",
-        UBIOPOT_FW_VERSION_STR,
-        UBIOPOT_PROTOCOL_VERSION);
+        AQUAHMET_FW_VERSION_STR,
+        AQUAHMET_PROTOCOL_VERSION);
     if (n < 0 || (size_t)n >= buf_len) return -1;
     return n;
 }

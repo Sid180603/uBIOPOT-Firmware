@@ -1,6 +1,6 @@
 /**
  * @file main_sim.c
- * @brief uBIOPOT PC Simulator entry point for lv_port_pc_vscode.
+ * @brief Aqua-HMET PC Simulator entry point for lv_port_pc_vscode.
  *
  * Replaces src/main.c (which called lv_demo_widgets()).
  *
@@ -153,7 +153,7 @@ int main(int argc, char **argv)
     /* ---- 4. Init all screens and show splash ---- */
     screen_mgr_init(disp, enc_indev);
 
-    printf("[SIM] uBIOPOT PC Simulator ready\n");
+    printf("[SIM] Aqua-HMET PC Simulator ready\n");
     printf("[SIM] Mouse wheel = navigate   Middle click = select\n");
     printf("[SIM] Splash -> Home after ~2 s. Scroll to 'Start DPV' and middle-click.\n");
 

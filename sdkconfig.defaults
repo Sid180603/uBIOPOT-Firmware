@@ -1,4 +1,4 @@
-# uBIOPOT sdkconfig.defaults — committed; drives idf.py configuration defaults.
+# Aqua-HMET sdkconfig.defaults — committed; drives idf.py configuration defaults.
 # The generated `sdkconfig` is git-ignored (never commit sdkconfig itself).
 # To regenerate: idf.py reconfigure
 

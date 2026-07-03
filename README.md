@@ -1,6 +1,6 @@
-# uBIOPOT Firmware v2
+# Aqua-HMET Firmware
 
-ESP-IDF rewrite of the uBIOPOT multiplexed potentiostat firmware (BITS Pilani, *Lab on a Chip* 2025).
+ESP-IDF firmware for the Aqua-HMET DPV heavy metal detector (BITS Pilani, 2025–2026).
 
 **Hardware:** ESP32-WROOM-32 + MCP4921 12-bit SPI DAC + ADS1115 16-bit I²C ADC + 3× CD4066 electrode mux + ILI9341 2.4" TFT.
 
@@ -138,7 +138,7 @@ RAM budget under WiFi + LVGL simultaneously, physical button ergonomics.
 
 ## P1 Bench Bringup Checklist
 
-Flash with `CONFIG_UBIOPOT_SELFTEST_MODE=y` (menuconfig → uBIOPOT → Dev/Debug):
+Flash with `CONFIG_UBIOPOT_SELFTEST_MODE=y` (menuconfig → Aqua-HMET → Dev/Debug):
 
     idf.py menuconfig          # enable UBIOPOT_SELFTEST_MODE
     idf.py -p <PORT> flash monitor

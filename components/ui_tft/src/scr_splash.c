@@ -45,28 +45,28 @@ lv_obj_t *scr_splash_create(lv_group_t *group)
 
     /* ── Top micro-label ────────────────────────────────────────── */
     lv_obj_t *top = lv_label_create(s_scr);
-    lv_label_set_text(top, "BITS Pilani   uBIOPOT");
+    lv_label_set_text(top, "BITS Pilani   Aqua-HMET");
     lv_obj_set_style_text_color(top, lv_color_hex(UI_COLOR_DIM), 0);
     lv_obj_set_style_text_font(top, &lv_font_montserrat_14, 0);
     lv_obj_align(top, LV_ALIGN_TOP_MID, 0, 10);
 
     /* ── Main title ─────────────────────────────────────────────── */
     lv_obj_t *title = lv_label_create(s_scr);
-    lv_label_set_text(title, "uBIOPOT");
+    lv_label_set_text(title, "Aqua-HMET");
     lv_obj_set_style_text_color(title, lv_color_hex(UI_COLOR_ACCENT), 0);
     lv_obj_set_style_text_font(title, &lv_font_montserrat_28, 0);
     lv_obj_align(title, LV_ALIGN_CENTER, 0, -20);
 
     /* ── Sub-label ──────────────────────────────────────────────── */
     lv_obj_t *sub = lv_label_create(s_scr);
-    lv_label_set_text(sub, "Multiplexed Potentiostat v2");
+    lv_label_set_text(sub, "DPV Heavy Metal Detector");
     lv_obj_set_style_text_color(sub, lv_color_hex(UI_COLOR_TEXT), 0);
     lv_obj_set_style_text_font(sub, &lv_font_montserrat_14, 0);
     lv_obj_align(sub, LV_ALIGN_CENTER, 0, 14);
 
     /* ── Version tag ────────────────────────────────────────────── */
     lv_obj_t *ver = lv_label_create(s_scr);
-    lv_label_set_text(ver, "fw v2.0.0  |  DPV");
+    lv_label_set_text(ver, "fw v1.0.0  |  DPV");
     lv_obj_set_style_text_color(ver, lv_color_hex(UI_COLOR_DIM), 0);
     lv_obj_set_style_text_font(ver, &lv_font_montserrat_14, 0);
     lv_obj_align(ver, LV_ALIGN_BOTTOM_MID, 0, -10);

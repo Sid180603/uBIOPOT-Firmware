@@ -1,6 +1,6 @@
 /**
  * @file lv_conf.h
- * LVGL v9.5.0 configuration for uBIOPOT PC Simulator (lv_port_pc_vscode / SDL2).
+ * LVGL v9.5.0 configuration for Aqua-HMET PC Simulator (lv_port_pc_vscode / SDL2).
  *
  * Mirrors the firmware's sdkconfig.defaults LVGL options so screen code is
  * 100% portable between the ESP32 target and the desktop simulator.
@@ -124,7 +124,7 @@
 #define LV_USE_ASSERT_OBJ           0
 
 /* ======================================================================
-   FONTS — enable the three sizes used in uBIOPOT screens.
+   FONTS — enable the three sizes used in Aqua-HMET screens.
    ====================================================================== */
 
 /* Montserrat 14 — body text, status bar, hints */
@@ -179,7 +179,7 @@
 #define LV_USE_ARABIC_PERSIAN_CHARS 0
 
 /* ======================================================================
-   WIDGETS — enable all widgets used in uBIOPOT screens.
+   WIDGETS — enable all widgets used in Aqua-HMET screens.
    ====================================================================== */
 #define LV_USE_ANIMIMG      0
 #define LV_USE_ARC          1  /* equilibration spinner arc */

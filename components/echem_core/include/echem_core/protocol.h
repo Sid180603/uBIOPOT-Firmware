@@ -27,11 +27,11 @@ extern "C" {
 
 /* --------------------------------------------------------------------------
  * Protocol version
- * Increment UBIOPOT_PROTOCOL_VERSION on any breaking change to NDJSON schema.
+ * Increment AQUAHMET_PROTOCOL_VERSION on any breaking change to NDJSON schema.
  * -------------------------------------------------------------------------- */
 
-#define UBIOPOT_PROTOCOL_VERSION  1
-#define UBIOPOT_FW_VERSION_STR    "1.0.0-dev"
+#define AQUAHMET_PROTOCOL_VERSION  1
+#define AQUAHMET_FW_VERSION_STR    "1.0.0-dev"
 
 /* --------------------------------------------------------------------------
  * Command types (host → device)

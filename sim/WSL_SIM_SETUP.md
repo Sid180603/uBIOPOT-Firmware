@@ -1,4 +1,4 @@
-# uBIOPOT LVGL Simulator — WSL Setup Guide
+# Aqua-HMET LVGL Simulator — WSL Setup Guide
 
 Develop and iterate on the TFT UI screens on your laptop using the LVGL PC simulator
 (`lv_port_pc_vscode` + SDL2). Rebuild takes **< 2 s** vs a 30–60 s flash cycle.
@@ -57,7 +57,7 @@ sudo apt install -y libsdl2-dev cmake ninja-build gcc g++
 
 ```bash
 cd ~
-git clone --recursive https://github.com/lvgl/lv_port_pc_vscode ubiopot_sim
+git clone --recursive https://github.com/lvgl/lv_port_pc_vscode aquahmet_sim
 ```
 
 This pulls LVGL9 and FreeRTOS as submodules (~700 MB total, takes ~2 minutes).
@@ -68,7 +68,7 @@ This pulls LVGL9 and FreeRTOS as submodules (~700 MB total, takes ~2 minutes).
 
 ```bash
 REPO="/c/Users/<your-username>/Documents/Coding/ST Thesis/uBIOPOT-Firmware"
-SIM=~/ubiopot_sim
+SIM=~/aquahmet_sim
 ```
 
 Replace `<your-username>` with your Windows username (e.g. `z00541ce`).
@@ -151,7 +151,7 @@ Three edits are needed. Run this Python script once:
 python3 << 'EOF'
 import re
 
-path = '/home/Sid18/ubiopot_sim/CMakeLists.txt'   # adjust username if needed
+path = '/home/Sid18/aquahmet_sim/CMakeLists.txt'   # adjust username if needed
 txt = open(path).read()
 
 # 1. Replace the non-existent main/inc include with our actual paths
@@ -212,14 +212,14 @@ EOF
 First build (compiles LVGL core ~400 files + our screens):
 
 ```bash
-cd ~/ubiopot_sim
+cd ~/aquahmet_sim
 cmake -B build -G Ninja
 cmake --build build -j$(nproc)
 ```
 
 Expected output ends with:
 ```
-[N/N] Linking CXX executable /home/.../ubiopot_sim/bin/main
+[N/N] Linking CXX executable /home/.../aquahmet_sim/bin/main
 ```
 
 No errors. If errors appear, see the Troubleshooting section below.
@@ -227,7 +227,7 @@ No errors. If errors appear, see the Troubleshooting section below.
 **Subsequent rebuilds** (after editing a screen file) — just re-copy and rebuild:
 
 ```bash
-cp "$REPO/components/ui_tft/src/scr_scan.c" ~/ubiopot_sim/src/screens/
+cp "$REPO/components/ui_tft/src/scr_scan.c" ~/aquahmet_sim/src/screens/
 cmake --build build -j$(nproc)   # ~2 seconds
 ```
 
@@ -245,7 +245,7 @@ A **320×240 landscape window** appears on the Windows desktop (WSLg). Log outpu
 [I][scr_splash] Splash screen created
 [I][scr_home] Home screen created
 ...
-[SIM] uBIOPOT PC Simulator ready
+[SIM] Aqua-HMET PC Simulator ready
 [SIM] Mouse wheel = navigate   Middle click = select
 [SIM] Splash -> Home after ~2 s. Scroll to 'Start DPV' and middle-click.
 ```
@@ -266,7 +266,7 @@ A **320×240 landscape window** appears on the Windows desktop (WSLg). Log outpu
 
 ## Simulated flow
 
-1. **Splash** — "uBIOPOT v2" fades in
+1. **Splash** — "Aqua-HMET" fades in
 2. **Home** — menu list; teal highlight on focused item
 3. Navigate to **Start DPV** → press Enter/middle-click
 4. **Scan-Live** — voltammogram draws left→right (Pb²⁺ peak at −400 mV)
@@ -281,8 +281,8 @@ Edit any screen file in `components/ui_tft/src/`, re-copy, and rebuild:
 
 ```bash
 # Edit scr_scan.c in VS Code, then:
-cp "$REPO/components/ui_tft/src/scr_scan.c" ~/ubiopot_sim/src/screens/
-cmake --build ~/ubiopot_sim/build -j$(nproc) && ~/ubiopot_sim/bin/main
+cp "$REPO/components/ui_tft/src/scr_scan.c" ~/aquahmet_sim/src/screens/
+cmake --build ~/aquahmet_sim/build -j$(nproc) && ~/aquahmet_sim/bin/main
 ```
 
 **Design on PC → verify on board.** The sim nails layout, animations, colours, and navigation
@@ -313,12 +313,12 @@ LVGL examples require widgets we've intentionally disabled. Apply patch 3
 
 ### Segfault in `lv_tlsf_create` / `lv_mem_init`
 
-The `lv_conf.h` in `ubiopot_sim/` is the old version with `LV_STDLIB_BUILTIN` and a broken
+The `lv_conf.h` in `aquahmet_sim/` is the old version with `LV_STDLIB_BUILTIN` and a broken
 `LV_MEM_POOL_ALLOC` empty macro. Re-copy `sim/lv_conf.h` from the repo — it uses
 `LV_STDLIB_CLIB` (standard `malloc`, correct for desktop):
 
 ```bash
-cp "$REPO/sim/lv_conf.h" ~/ubiopot_sim/lv_conf.h
+cp "$REPO/sim/lv_conf.h" ~/aquahmet_sim/lv_conf.h
 cmake --build build -j$(nproc)
 ```
 

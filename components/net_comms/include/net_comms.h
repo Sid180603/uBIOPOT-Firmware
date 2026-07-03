@@ -7,10 +7,10 @@
  * TODO P5: implement the following.
  *
  * WiFi APSTA:
- *   SoftAP always on: SSID "uBIOPOT-<MAC4>", WPA2, GW 192.168.4.1.
+ *   SoftAP always on: SSID "Aqua-HMET-<MAC4>", WPA2, GW 192.168.4.1.
  *   STA optional: NVS credentials → connect + auto-reconnect.
  *   Captive portal: UDP:53 DNS server answers every domain → 192.168.4.1.
- *   mDNS: hostname "ubiopot" → ubiopot.local (_http._tcp).
+ *   mDNS: hostname "aquahmet" → aquahmet.local (_http._tcp).
  *
  * HTTP server (Core-0, esp_http_server):
  *   GET  /         → LittleFS gzip SPA (chunked, Content-Encoding: gzip)

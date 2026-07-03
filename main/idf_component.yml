@@ -1,4 +1,4 @@
-## IDF Component Manager manifest for uBIOPOT main component.
+## IDF Component Manager manifest for Aqua-HMET main component.
 ## Run `idf.py build` to resolve; commit the generated dependencies.lock.
 
 dependencies:
@@ -21,7 +21,7 @@ dependencies:
   joltwallet/littlefs:
     version: ">=1.22.1,<2.0.0"
 
-  ## mDNS for ubiopot.local hostname resolution (P5)
+  ## mDNS for aquahmet.local hostname resolution (P5)
   espressif/mdns:
     version: ">=1.0.0"
 

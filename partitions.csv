@@ -1,4 +1,4 @@
-# uBIOPOT custom partition table — 4 MB flash
+# Aqua-HMET custom partition table — 4 MB flash
 # factory  ~1500 KB  main application
 # littlefs ~1000 KB  web assets (SPA, gzipped) + saved CSV exports
 # nvs        24 KB   calibration, WiFi creds, settings (NVS key-value store)

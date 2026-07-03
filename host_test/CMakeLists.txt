@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(ubiopot_host_test C)
+project(aquahmet_host_test C)
 set(CMAKE_C_STANDARD 99)
 
 # ==============================================================================

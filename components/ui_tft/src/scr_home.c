@@ -4,7 +4,7 @@
  *
  * Layout (landscape 320×240):
  *   ┌──────────────────────────────────────────────────┐
- *   │  STATUS BAR  uBIOPOT        ● READY    E1  WiFi  │  h=24
+ *   │  STATUS BAR  Aqua-HMET      ● READY    E1  WiFi  │  h=24
  *   ├──────────────────────────────────────────────────┤
  *   │  > Start DPV                                      │  ← focused item (teal)
  *   │    Electrode: 1                                   │
@@ -178,7 +178,7 @@ static void menu_item_click(lv_event_t *e)
             screen_mgr_goto_settings();
             break;
         case MENU_ABOUT:
-            screen_mgr_show_toast("uBIOPOT v2  |  BITS Pilani 2026");
+            screen_mgr_show_toast("Aqua-HMET v1  |  BITS Pilani 2026");
             break;
     }
 }
@@ -206,7 +206,7 @@ lv_obj_t *scr_home_create(lv_group_t *group)
     lv_obj_set_style_radius(bar, 0, 0);
 
     lv_obj_t *bar_name = lv_label_create(bar);
-    lv_label_set_text(bar_name, "uBIOPOT");
+    lv_label_set_text(bar_name, "Aqua-HMET");
     lv_obj_set_style_text_color(bar_name, lv_color_hex(UI_COLOR_ACCENT), 0);
     lv_obj_set_style_text_font(bar_name, &lv_font_montserrat_14, 0);
     lv_obj_align(bar_name, LV_ALIGN_LEFT_MID, 8, 0);

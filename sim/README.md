@@ -1,4 +1,4 @@
-# uBIOPOT LVGL PC Simulator
+# Aqua-HMET LVGL PC Simulator
 
 Develop and iterate on the TFT UI screens on your laptop using SDL2 — **no ESP32 needed, no flash cycles**.
 
@@ -32,7 +32,7 @@ git clone --recursive https://github.com/lvgl/lv_port_pc_vscode lv_port_pc_vscod
 cd lv_port_pc_vscode
 ```
 
-### Configure for uBIOPOT
+### Configure for Aqua-HMET
 
 1. **Copy `lv_conf.h`** (from this `sim/` directory) into the cloned `lv_port_pc_vscode/` root.
 

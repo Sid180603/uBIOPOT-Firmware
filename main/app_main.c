@@ -8,14 +8,14 @@
 #include "acq_engine.h"
 #include "ui_tft.h"
 
-static const char *TAG = "ubiopot";
+static const char *TAG = "aqua-hmet";
 
 /* Calibration constants -- loaded from NVS in P8; compile defaults for P0-P7. */
 static pstat_calib_t s_cal = PSTAT_CALIB_DEFAULT;
 
 void app_main(void)
 {
-    ESP_LOGI(TAG, "uBIOPOT v2 starting");
+    ESP_LOGI(TAG, "Aqua-HMET v1 starting");
 
     /* ---- P2: register DPV technique (and stubs for CV/LSV/SWV/NPV) ---- */
     technique_registry_init();
@@ -46,7 +46,7 @@ void app_main(void)
     /* Signal ready */
     pstat_led_set(PSTAT_LED_READY, true);
     pstat_led_set(PSTAT_LED_PROCESSING, false);
-    ESP_LOGI(TAG, "uBIOPOT v2 ready (READY LED on)");
+    ESP_LOGI(TAG, "Aqua-HMET v1 ready (READY LED on)");
 
     /* ---- P3: start acquisition engine (AcqTask Core-1 + DispTask Core-0) ---- */
     ret = acq_engine_init(&s_cal);

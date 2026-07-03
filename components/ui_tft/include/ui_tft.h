@@ -57,7 +57,7 @@ esp_err_t ui_tft_start(void);
  *
  * @param ssid   Access-point SSID string (copied).
  * @param ip     IP address string, e.g. "192.168.4.1" (copied).
- * @param url    Full URL string, e.g. "http://ubiopot.local" (copied).
+ * @param url    Full URL string, e.g. "http://aquahmet.local" (copied).
  */
 void ui_tft_set_wifi_info(const char *ssid, const char *ip, const char *url);
 

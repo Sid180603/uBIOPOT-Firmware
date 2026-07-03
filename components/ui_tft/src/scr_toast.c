@@ -40,18 +40,28 @@ static void toast_anim_deleted_cb(lv_anim_t *a)
  * Public
  * --------------------------------------------------------------------------- */
 
-void scr_toast_show(const char *msg)
+void scr_toast_show(const char *msg, toast_level_t level)
 {
     /* Create on the top layer so it overlays whichever screen is active */
     lv_obj_t *toast = lv_obj_create(lv_layer_top());
     lv_obj_set_size(toast, LV_HOR_RES - 20, 44);
-    lv_obj_set_style_bg_color(toast, lv_color_hex(UI_COLOR_ABORT), 0);
-    lv_obj_set_style_bg_opa(toast, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(toast, 0, 0);
     lv_obj_set_style_radius(toast, 6, 0);
     lv_obj_set_style_pad_all(toast, 8, 0);
 
-    /* Start off-screen above the display */
+    if (level == TOAST_ERROR) {
+        /* Red background — reserved for real failures */
+        lv_obj_set_style_bg_color(toast, lv_color_hex(UI_COLOR_ABORT), 0);
+        lv_obj_set_style_bg_opa(toast, LV_OPA_COVER, 0);
+    } else {
+        /* Informational: dark-surface bg + 3px left accent strip */
+        lv_obj_set_style_bg_color(toast, lv_color_hex(UI_COLOR_SURFACE), 0);
+        lv_obj_set_style_bg_opa(toast, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_side(toast, LV_BORDER_SIDE_LEFT, 0);
+        lv_obj_set_style_border_color(toast, lv_color_hex(UI_COLOR_ACCENT), 0);
+        lv_obj_set_style_border_width(toast, 3, 0);
+        lv_obj_set_style_border_opa(toast, LV_OPA_COVER, 0);
+    }
     lv_obj_align(toast, LV_ALIGN_TOP_MID, 0, -60);
 
     /* Message label */
@@ -59,7 +69,8 @@ void scr_toast_show(const char *msg)
     lv_label_set_text(lbl, msg ? msg : "Unknown error");
     lv_label_set_long_mode(lbl, LV_LABEL_LONG_SCROLL_CIRCULAR);
     lv_obj_set_width(lbl, LV_HOR_RES - 44);
-    lv_obj_set_style_text_color(lbl, lv_color_white(), 0);
+    lv_obj_set_style_text_color(lbl, (level == TOAST_ERROR) ? lv_color_white()
+                                                             : lv_color_hex(UI_COLOR_TEXT), 0);
     lv_obj_set_style_text_font(lbl, &lv_font_montserrat_14, 0);
     lv_obj_align(lbl, LV_ALIGN_LEFT_MID, 0, 0);
 
@@ -77,7 +88,7 @@ void scr_toast_show(const char *msg)
     lv_timer_t *tmr = lv_timer_create(toast_dismiss_cb, 3000, toast);
     lv_timer_set_repeat_count(tmr, 1);
 
-    ESP_LOGW(TAG, "Toast: %s", msg ? msg : "(null)");
+    ESP_LOGW(TAG, "Toast[%s]: %s", (level == TOAST_ERROR) ? "ERR" : "INF", msg ? msg : "(null)");
 }
 
 static void toast_dismiss_cb(lv_timer_t *t)

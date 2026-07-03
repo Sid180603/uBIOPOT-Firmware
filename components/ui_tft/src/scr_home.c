@@ -27,15 +27,25 @@
 
 static const char *TAG = "scr_home";
 
+/* #15 animation wrapper — set dot opacity */
+static void dot_set_opa(void *obj, int32_t val)
+{
+    lv_obj_set_style_opa((lv_obj_t *)obj, (lv_opa_t)val, 0);
+}
+
 /* -------------------------------------------------------------------------
  * State
  * ------------------------------------------------------------------------- */
 
 static lv_obj_t  *s_scr         = NULL;
-static lv_obj_t  *s_lbl_status  = NULL;   /* "● READY" / "● RUNNING" etc */
-static lv_obj_t  *s_lbl_elec    = NULL;   /* "Electrode: 1" in status bar */
+static lv_obj_t  *s_dot_status  = NULL;   /* 10×10 circle: green/amber/red         */
+static lv_obj_t  *s_lbl_status  = NULL;   /* "READY" / "RUNNING" text              */
+static lv_obj_t  *s_lbl_elec    = NULL;   /* "Electrode: 1" in status bar          */
 static lv_group_t *s_grp        = NULL;
 static uint8_t    s_electrode   = 1;      /* Selected electrode (1-3; 0=All) */
+
+/* #15 — pulse animation handle (kept for cancel on state change) */
+static lv_anim_t  s_dot_anim;
 
 /* Menu item indices */
 #define MENU_START_DPV   0
@@ -58,26 +68,43 @@ static void update_electrode_label(void);
  * Helpers
  * ------------------------------------------------------------------------- */
 
+/**
+ * Create a standard menu button inside a flex container.
+ * @param parent   Flex container (not the screen directly).
+ * @param text     Label text.
+ * @param idx      Menu index passed back via user_data.
+ * @param primary  If true, use 20pt font (#1) and 2px accent left-border (#2).
+ */
 static lv_obj_t *create_menu_item(lv_obj_t *parent, const char *text,
-                                   int idx, int y_pos)
+                                   int idx, bool primary)
 {
     lv_obj_t *btn = lv_btn_create(parent);
-    lv_obj_set_size(btn, LV_HOR_RES - 16, 30);
-    lv_obj_set_pos(btn, 8, y_pos);
+    lv_obj_set_size(btn, LV_HOR_RES - 16, 34);
 
-    /* Normal state: transparent bg, dim border on bottom */
+    /* Normal state */
     lv_obj_set_style_bg_opa(btn, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(btn, 0, 0);
-    lv_obj_set_style_border_width(btn, 1, LV_STATE_FOCUSED);
-    lv_obj_set_style_border_color(btn, lv_color_hex(UI_COLOR_ACCENT), LV_STATE_FOCUSED);
-    lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, LV_STATE_FOCUSED);
-    lv_obj_set_style_bg_color(btn, lv_color_hex(UI_COLOR_FOCUS), LV_STATE_FOCUSED);
     lv_obj_set_style_radius(btn, 4, 0);
     lv_obj_set_style_pad_all(btn, 4, 0);
 
+    /* #2: accent 2px left border for primary action (Start DPV) */
+    if (primary) {
+        lv_obj_set_style_border_side(btn, LV_BORDER_SIDE_LEFT, 0);
+        lv_obj_set_style_border_color(btn, lv_color_hex(UI_COLOR_ACCENT), 0);
+        lv_obj_set_style_border_width(btn, 2, 0);
+    }
+
+    /* Focused state */
+    lv_obj_set_style_border_width(btn, 1, LV_STATE_FOCUSED);
+    lv_obj_set_style_border_side(btn, LV_BORDER_SIDE_FULL, LV_STATE_FOCUSED);
+    lv_obj_set_style_border_color(btn, lv_color_hex(UI_COLOR_ACCENT), LV_STATE_FOCUSED);
+    lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, LV_STATE_FOCUSED);
+    lv_obj_set_style_bg_color(btn, lv_color_hex(UI_COLOR_FOCUS), LV_STATE_FOCUSED);
+
     lv_obj_t *lbl = lv_label_create(btn);
     lv_label_set_text(lbl, text);
-    lv_obj_set_style_text_font(lbl, &lv_font_montserrat_14, 0);
+    /* #1: 20pt for primary action (Start DPV) */
+    lv_obj_set_style_text_font(lbl, primary ? &lv_font_montserrat_20 : &lv_font_montserrat_14, 0);
     lv_obj_set_style_text_color(lbl, lv_color_hex(UI_COLOR_TEXT), 0);
     lv_obj_set_style_text_color(lbl, lv_color_hex(UI_COLOR_ACCENT), LV_STATE_FOCUSED);
     lv_obj_align(lbl, LV_ALIGN_LEFT_MID, 8, 0);
@@ -90,24 +117,52 @@ static lv_obj_t *create_menu_item(lv_obj_t *parent, const char *text,
 
 static void update_status_label(scan_state_t state)
 {
-    if (!s_lbl_status) return;
+    if (!s_dot_status || !s_lbl_status) return;
+
+    /* Stop any existing dot pulse animation */
+    lv_anim_delete(s_dot_status, dot_set_opa);
+    lv_obj_set_style_opa(s_dot_status, LV_OPA_COVER, 0);
+
     switch (state) {
         case SCAN_STATE_IDLE:
         case SCAN_STATE_COMPLETE:
-            lv_label_set_text(s_lbl_status, LV_SYMBOL_OK "  READY");
+            lv_obj_set_style_bg_color(s_dot_status, lv_color_hex(UI_COLOR_READY), 0);
+            lv_label_set_text(s_lbl_status, "READY");
             lv_obj_set_style_text_color(s_lbl_status, lv_color_hex(UI_COLOR_READY), 0);
             break;
         case SCAN_STATE_EQUILIBRATING:
-        case SCAN_STATE_RUNNING:
-            lv_label_set_text(s_lbl_status, LV_SYMBOL_REFRESH "  RUNNING");
+        case SCAN_STATE_RUNNING: {
+            lv_obj_set_style_bg_color(s_dot_status, lv_color_hex(UI_COLOR_PROC), 0);
+            lv_label_set_text(s_lbl_status, "RUNNING");
             lv_obj_set_style_text_color(s_lbl_status, lv_color_hex(UI_COLOR_PROC), 0);
+            /* Pulse the dot: opacity 255→60→255, 1500 ms cycle */
+            lv_anim_init(&s_dot_anim);
+            lv_anim_set_var(&s_dot_anim, s_dot_status);
+            lv_anim_set_exec_cb(&s_dot_anim, dot_set_opa);
+            lv_anim_set_values(&s_dot_anim, LV_OPA_COVER, LV_OPA_20);
+            lv_anim_set_duration(&s_dot_anim, 750);
+            lv_anim_set_playback_duration(&s_dot_anim, 750);
+            lv_anim_set_repeat_count(&s_dot_anim, LV_ANIM_REPEAT_INFINITE);
+            lv_anim_start(&s_dot_anim);
             break;
+        }
         case SCAN_STATE_ABORTING:
-            lv_label_set_text(s_lbl_status, LV_SYMBOL_CLOSE "  ABORTING");
+            lv_obj_set_style_bg_color(s_dot_status, lv_color_hex(UI_COLOR_ABORT), 0);
+            lv_label_set_text(s_lbl_status, "ABORTING");
             lv_obj_set_style_text_color(s_lbl_status, lv_color_hex(UI_COLOR_ABORT), 0);
+            /* Fast blink for abort */
+            lv_anim_init(&s_dot_anim);
+            lv_anim_set_var(&s_dot_anim, s_dot_status);
+            lv_anim_set_exec_cb(&s_dot_anim, dot_set_opa);
+            lv_anim_set_values(&s_dot_anim, LV_OPA_COVER, LV_OPA_TRANSP);
+            lv_anim_set_duration(&s_dot_anim, 300);
+            lv_anim_set_playback_duration(&s_dot_anim, 300);
+            lv_anim_set_repeat_count(&s_dot_anim, LV_ANIM_REPEAT_INFINITE);
+            lv_anim_start(&s_dot_anim);
             break;
         case SCAN_STATE_ERROR:
-            lv_label_set_text(s_lbl_status, LV_SYMBOL_WARNING "  ERROR");
+            lv_obj_set_style_bg_color(s_dot_status, lv_color_hex(UI_COLOR_ABORT), 0);
+            lv_label_set_text(s_lbl_status, "ERROR");
             lv_obj_set_style_text_color(s_lbl_status, lv_color_hex(UI_COLOR_ABORT), 0);
             break;
     }
@@ -116,19 +171,20 @@ static void update_status_label(scan_state_t state)
 static void update_electrode_label(void)
 {
     if (!s_lbl_elec || !s_menu_items[MENU_ELECTRODE]) return;
-    char ebuf[24];
-    if (s_electrode == 0) {
-        snprintf(ebuf, sizeof(ebuf), "Electrode:  All");
-    } else {
-        snprintf(ebuf, sizeof(ebuf), "Electrode:  %u", s_electrode);
-    }
+
     /* Update status bar electrode label */
     char sbuf[8];
     snprintf(sbuf, sizeof(sbuf), s_electrode == 0 ? "All" : "E%u", s_electrode);
     lv_label_set_text(s_lbl_elec, sbuf);
-    /* Update the menu item label child */
-    lv_obj_t *lbl = lv_obj_get_child(s_menu_items[MENU_ELECTRODE], 0);
-    if (lbl) lv_label_set_text(lbl, ebuf);
+
+    /* #3: Electrode item has TWO children — key label (child 0) + value label (child 1).
+     * Update the right-aligned value label only. */
+    lv_obj_t *val_lbl = lv_obj_get_child(s_menu_items[MENU_ELECTRODE], 1);
+    if (val_lbl) {
+        char vbuf[8];
+        snprintf(vbuf, sizeof(vbuf), s_electrode == 0 ? "All" : "%u", s_electrode);
+        lv_label_set_text(val_lbl, vbuf);
+    }
 }
 
 /* -------------------------------------------------------------------------
@@ -157,7 +213,7 @@ static void menu_item_click(lv_event_t *e)
             if (ret == ESP_OK) {
                 screen_mgr_goto_scan();
             } else {
-                screen_mgr_show_toast("Start failed — check electrode");
+                screen_mgr_show_toast("Start failed \u2014 check electrode", TOAST_ERROR);
             }
             break;
         }
@@ -172,13 +228,13 @@ static void menu_item_click(lv_event_t *e)
             update_electrode_label();
             break;
         case MENU_PARAMS:
-            screen_mgr_show_toast("Params: set via WiFi web app or serial");
+            screen_mgr_show_toast("Params: set via WiFi web app or serial", TOAST_INFO);
             break;
         case MENU_SETTINGS:
             screen_mgr_goto_settings();
             break;
         case MENU_ABOUT:
-            screen_mgr_show_toast("Aqua-HMET v1  |  BITS Pilani 2026");
+            screen_mgr_show_toast("Aqua-HMET v1  |  BITS Pilani 2026", TOAST_INFO);
             break;
     }
 }
@@ -201,7 +257,9 @@ lv_obj_t *scr_home_create(lv_group_t *group)
     lv_obj_set_pos(bar, 0, 0);
     lv_obj_set_style_bg_color(bar, lv_color_hex(UI_COLOR_SURFACE), 0);
     lv_obj_set_style_bg_opa(bar, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(bar, 0, 0);
+    lv_obj_set_style_border_side(bar, LV_BORDER_SIDE_BOTTOM, 0);  /* #4: 1px bottom divider */
+    lv_obj_set_style_border_color(bar, lv_color_hex(UI_COLOR_BORDER), 0);
+    lv_obj_set_style_border_width(bar, 1, 0);
     lv_obj_set_style_pad_all(bar, 0, 0);
     lv_obj_set_style_radius(bar, 0, 0);
 
@@ -211,11 +269,20 @@ lv_obj_t *scr_home_create(lv_group_t *group)
     lv_obj_set_style_text_font(bar_name, &lv_font_montserrat_14, 0);
     lv_obj_align(bar_name, LV_ALIGN_LEFT_MID, 8, 0);
 
+    /* #15: Status dot (10×10 circle) + text label — centered in bar */
+    s_dot_status = lv_obj_create(bar);
+    lv_obj_set_size(s_dot_status, 10, 10);
+    lv_obj_set_style_radius(s_dot_status, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_color(s_dot_status, lv_color_hex(UI_COLOR_READY), 0);
+    lv_obj_set_style_bg_opa(s_dot_status, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(s_dot_status, 0, 0);
+    lv_obj_align(s_dot_status, LV_ALIGN_CENTER, -34, 0);
+
     s_lbl_status = lv_label_create(bar);
-    lv_label_set_text(s_lbl_status, LV_SYMBOL_OK "  READY");
+    lv_label_set_text(s_lbl_status, "READY");
     lv_obj_set_style_text_color(s_lbl_status, lv_color_hex(UI_COLOR_READY), 0);
     lv_obj_set_style_text_font(s_lbl_status, &lv_font_montserrat_14, 0);
-    lv_obj_align(s_lbl_status, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_align(s_lbl_status, LV_ALIGN_CENTER, -18, 0);
 
     s_lbl_elec = lv_label_create(bar);
     lv_label_set_text(s_lbl_elec, "E1");
@@ -223,17 +290,64 @@ lv_obj_t *scr_home_create(lv_group_t *group)
     lv_obj_set_style_text_font(s_lbl_elec, &lv_font_montserrat_14, 0);
     lv_obj_align(s_lbl_elec, LV_ALIGN_RIGHT_MID, -8, 0);
 
-    /* ── Menu items ─────────────────────────────────────────────── */
-    const char *labels[MENU_COUNT] = {
-        LV_SYMBOL_PLAY "  Start DPV",
-        "Electrode:  1",
-        LV_SYMBOL_LIST "  View Params",
-        LV_SYMBOL_SETTINGS "  Settings",
-        LV_SYMBOL_HOME "  About",
-    };
-    for (int i = 0; i < MENU_COUNT; i++) {
-        s_menu_items[i] = create_menu_item(s_scr, labels[i], i, 28 + i * 34);
+    /* ── Menu flex container (#10) ───────────────────────────────── */
+    /* Sits between status bar (h=24) and hint bar (h=30, at y=210).
+     * Flex column distributes 5 items with even row gap.                */
+    lv_obj_t *menu_cont = lv_obj_create(s_scr);
+    lv_obj_set_size(menu_cont, LV_HOR_RES, LV_VER_RES - 24 - 30);
+    lv_obj_set_pos(menu_cont, 0, 25);  /* 1px below bar divider */
+    lv_obj_set_style_bg_opa(menu_cont, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(menu_cont, 0, 0);
+    lv_obj_set_style_pad_all(menu_cont, 0, 0);
+    lv_obj_set_style_pad_row(menu_cont, 2, 0);
+    lv_obj_set_style_radius(menu_cont, 0, 0);
+    lv_obj_set_flex_flow(menu_cont, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(menu_cont, LV_FLEX_ALIGN_SPACE_EVENLY,
+                          LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    /* Start DPV — primary action: 20pt font + accent left border */
+    s_menu_items[MENU_START_DPV] = create_menu_item(menu_cont,
+                                    LV_SYMBOL_PLAY "  Start DPV", MENU_START_DPV, true);
+
+    /* Electrode — key-value toggle (#3): "Electrode" left, "1" right in accent */
+    {
+        lv_obj_t *btn = lv_btn_create(menu_cont);
+        lv_obj_set_size(btn, LV_HOR_RES - 16, 34);
+        lv_obj_set_style_bg_opa(btn, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(btn, 0, 0);
+        lv_obj_set_style_border_width(btn, 1, LV_STATE_FOCUSED);
+        lv_obj_set_style_border_side(btn, LV_BORDER_SIDE_FULL, LV_STATE_FOCUSED);
+        lv_obj_set_style_border_color(btn, lv_color_hex(UI_COLOR_ACCENT), LV_STATE_FOCUSED);
+        lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, LV_STATE_FOCUSED);
+        lv_obj_set_style_bg_color(btn, lv_color_hex(UI_COLOR_FOCUS), LV_STATE_FOCUSED);
+        lv_obj_set_style_radius(btn, 4, 0);
+        lv_obj_set_style_pad_all(btn, 4, 0);
+        /* Key label — left */
+        lv_obj_t *k = lv_label_create(btn);
+        lv_label_set_text(k, LV_SYMBOL_LOOP "  Electrode");
+        lv_obj_set_style_text_font(k, &lv_font_montserrat_14, 0);
+        lv_obj_set_style_text_color(k, lv_color_hex(UI_COLOR_TEXT), 0);
+        lv_obj_set_style_text_color(k, lv_color_hex(UI_COLOR_ACCENT), LV_STATE_FOCUSED);
+        lv_obj_align(k, LV_ALIGN_LEFT_MID, 8, 0);
+        /* Value label — right in accent, signals "this is changeable" */
+        lv_obj_t *v = lv_label_create(btn);
+        lv_label_set_text(v, "1");
+        lv_obj_set_style_text_font(v, &lv_font_montserrat_14, 0);
+        lv_obj_set_style_text_color(v, lv_color_hex(UI_COLOR_ACCENT), 0);
+        lv_obj_align(v, LV_ALIGN_RIGHT_MID, -8, 0);
+        lv_obj_add_event_cb(btn, menu_item_click, LV_EVENT_CLICKED,
+                            (void *)(intptr_t)MENU_ELECTRODE);
+        if (s_grp) lv_group_add_obj(s_grp, btn);
+        s_menu_items[MENU_ELECTRODE] = btn;
     }
+
+    /* Remaining items — standard style */
+    s_menu_items[MENU_PARAMS]   = create_menu_item(menu_cont,
+                                    LV_SYMBOL_LIST "  View Params", MENU_PARAMS, false);
+    s_menu_items[MENU_SETTINGS] = create_menu_item(menu_cont,
+                                    LV_SYMBOL_SETTINGS "  Settings", MENU_SETTINGS, false);
+    s_menu_items[MENU_ABOUT]    = create_menu_item(menu_cont,
+                                    LV_SYMBOL_HOME "  About", MENU_ABOUT, false);
 
     /* ── Hint bar ───────────────────────────────────────────────── */
     lv_obj_t *hbar = lv_obj_create(s_scr);
@@ -246,13 +360,13 @@ lv_obj_t *scr_home_create(lv_group_t *group)
     lv_obj_set_style_radius(hbar, 0, 0);
 
     lv_obj_t *hint_l = lv_label_create(hbar);
-    lv_label_set_text(hint_l, LV_SYMBOL_UP LV_SYMBOL_DOWN "  NAV: cycle");
+    lv_label_set_text(hint_l, LV_SYMBOL_UP LV_SYMBOL_DOWN "  Scroll");  /* #8: verbs not labels */
     lv_obj_set_style_text_color(hint_l, lv_color_hex(UI_COLOR_DIM), 0);
     lv_obj_set_style_text_font(hint_l, &lv_font_montserrat_14, 0);
     lv_obj_align(hint_l, LV_ALIGN_LEFT_MID, 8, 0);
 
     lv_obj_t *hint_r = lv_label_create(hbar);
-    lv_label_set_text(hint_r, "START: select  " LV_SYMBOL_OK);
+    lv_label_set_text(hint_r, "OK  Select  " LV_SYMBOL_OK);
     lv_obj_set_style_text_color(hint_r, lv_color_hex(UI_COLOR_DIM), 0);
     lv_obj_set_style_text_font(hint_r, &lv_font_montserrat_14, 0);
     lv_obj_align(hint_r, LV_ALIGN_RIGHT_MID, -8, 0);

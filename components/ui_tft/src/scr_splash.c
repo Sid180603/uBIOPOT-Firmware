@@ -60,7 +60,7 @@ lv_obj_t *scr_splash_create(lv_group_t *group)
     /* ── Sub-label ──────────────────────────────────────────────── */
     lv_obj_t *sub = lv_label_create(s_scr);
     lv_label_set_text(sub, "DPV Heavy Metal Detector");
-    lv_obj_set_style_text_color(sub, lv_color_hex(UI_COLOR_TEXT), 0);
+    lv_obj_set_style_text_color(sub, lv_color_hex(UI_COLOR_DIM), 0);  /* #5: dim subtitle — title dominates */
     lv_obj_set_style_text_font(sub, &lv_font_montserrat_14, 0);
     lv_obj_align(sub, LV_ALIGN_CENTER, 0, 14);
 
@@ -71,14 +71,56 @@ lv_obj_t *scr_splash_create(lv_group_t *group)
     lv_obj_set_style_text_font(ver, &lv_font_montserrat_14, 0);
     lv_obj_align(ver, LV_ALIGN_BOTTOM_MID, 0, -10);
 
-    /* ── Fade-in animation on the main title ────────────────────── */
+    /* ── Cascading fade-in animations (#14) ────────────────────────
+     * Stagger: top@0ms(300ms), title@200ms(800ms, existing),
+     *          sub@800ms(400ms), ver@1200ms(400ms).
+     * User's eye follows top→title→sub→ver = top-down hierarchy.    */
+
+    /* Helper macro: set initial opacity TRANSP so objects are invisible */
+    lv_obj_set_style_opa(top,   LV_OPA_TRANSP, 0);
+    lv_obj_set_style_opa(sub,   LV_OPA_TRANSP, 0);
+    lv_obj_set_style_opa(ver,   LV_OPA_TRANSP, 0);
+    lv_obj_set_style_opa(title, LV_OPA_TRANSP, 0);
+
+    /* Top label: delay 0 ms, 300 ms */
+    lv_anim_t a_top;
+    lv_anim_init(&a_top);
+    lv_anim_set_var(&a_top, top);
+    lv_anim_set_exec_cb(&a_top, splash_set_opa);
+    lv_anim_set_values(&a_top, LV_OPA_TRANSP, LV_OPA_COVER);
+    lv_anim_set_duration(&a_top, 300);
+    lv_anim_set_delay(&a_top, 0);
+    lv_anim_start(&a_top);
+
+    /* Main title: delay 200 ms, 800 ms */
     lv_anim_t a;
     lv_anim_init(&a);
     lv_anim_set_var(&a, title);
     lv_anim_set_exec_cb(&a, splash_set_opa);
     lv_anim_set_values(&a, LV_OPA_TRANSP, LV_OPA_COVER);
     lv_anim_set_duration(&a, 800);
+    lv_anim_set_delay(&a, 200);
     lv_anim_start(&a);
+
+    /* Subtitle: delay 800 ms, 400 ms */
+    lv_anim_t a_sub;
+    lv_anim_init(&a_sub);
+    lv_anim_set_var(&a_sub, sub);
+    lv_anim_set_exec_cb(&a_sub, splash_set_opa);
+    lv_anim_set_values(&a_sub, LV_OPA_TRANSP, LV_OPA_COVER);
+    lv_anim_set_duration(&a_sub, 400);
+    lv_anim_set_delay(&a_sub, 800);
+    lv_anim_start(&a_sub);
+
+    /* Version tag: delay 1200 ms, 400 ms */
+    lv_anim_t a_ver;
+    lv_anim_init(&a_ver);
+    lv_anim_set_var(&a_ver, ver);
+    lv_anim_set_exec_cb(&a_ver, splash_set_opa);
+    lv_anim_set_values(&a_ver, LV_OPA_TRANSP, LV_OPA_COVER);
+    lv_anim_set_duration(&a_ver, 400);
+    lv_anim_set_delay(&a_ver, 1200);
+    lv_anim_start(&a_ver);
 
     /* ── Auto-transition timer: go to Home after 2200 ms ────────── */
     lv_timer_create(splash_timer_cb, 2200, NULL);

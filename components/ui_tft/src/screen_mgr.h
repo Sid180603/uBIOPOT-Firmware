@@ -70,10 +70,21 @@ void screen_mgr_goto_results(void);
 void screen_mgr_goto_settings(void);
 
 /**
- * @brief  Show the error toast overlay (slides in from top, auto-dismisses after 3 s).
- * @param  msg  Error message string (must be static or valid for at least 3 s).
+ * @brief  Toast severity level.
+ *         INFO  — informational (teal accent strip, surface bg).
+ *         ERROR — error / failure (red background).
  */
-void screen_mgr_show_toast(const char *msg);
+typedef enum {
+    TOAST_INFO,
+    TOAST_ERROR,
+} toast_level_t;
+
+/**
+ * @brief  Show the toast overlay (slides in from top, auto-dismisses after 3 s).
+ * @param  msg    Message string (must remain valid for at least 3 s).
+ * @param  level  TOAST_INFO for informational messages, TOAST_ERROR for failures.
+ */
+void screen_mgr_show_toast(const char *msg, toast_level_t level);
 
 /* -------------------------------------------------------------------------
  * Scan-live screen updates (called from the engine sink, already under lock)
@@ -95,6 +106,9 @@ void scr_scan_set_progress(uint16_t step, uint16_t total);
 /** Switch scan screen to equilibration state (spinner + "Equilibrating..."). */
 void scr_scan_set_equilibrating(bool eq);
 
+/** Stop the elapsed time ticker (call when scan completes or aborts). */
+void scr_scan_stop_elapsed(void);
+
 /**
  * @brief  Return the electrode currently selected on the home screen.
  *         1/2/3 = individual electrode; 0 = All (sequential).
@@ -113,6 +127,15 @@ uint8_t scr_home_get_electrode(void);
  * @param  electrode  Which electrode the scan was for (1/2/3; 0 = sequential all).
  */
 void scr_results_set(const peak_t *peaks, uint16_t n_peaks, uint8_t electrode);
+
+/**
+ * @brief  Pass the raw scan curve to the results screen for the mini voltammogram.
+ *         Call after scr_results_set(), before screen_mgr_goto_results().
+ * @param  E_mV  Array of potential values (mV), length n.
+ * @param  I_uA  Array of differential-current values (µA), same length.
+ * @param  n     Number of points.
+ */
+void scr_results_set_curve(const float *E_mV, const float *I_uA, uint16_t n);
 
 /* -------------------------------------------------------------------------
  * Settings screen: update WiFi info (called from P5 net_comms)

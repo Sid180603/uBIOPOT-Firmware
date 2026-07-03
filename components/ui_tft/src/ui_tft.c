@@ -176,10 +176,13 @@ static void sink_on_event(scan_event_t evt, const char *info, void *ctx)
             break;
 
         case SCAN_EVT_SCAN_DONE: {
+            scr_scan_stop_elapsed();
             /* Detect peaks from collected data */
             s_n_peaks = peaks_find(s_I_buf, s_E_buf, s_pt_count,
                                    s_peaks, MAX_PEAKS, 1.0f /* µA prominence */);
             scr_results_set(s_peaks, s_n_peaks, s_electrode);
+            /* Pass raw curve for mini voltammogram (#12) */
+            scr_results_set_curve(s_E_buf, s_I_buf, s_pt_count);
             screen_mgr_goto_results();
             scr_home_set_state(SCAN_STATE_IDLE);
             pstat_led_set(PSTAT_LED_READY,      true);
@@ -188,9 +191,10 @@ static void sink_on_event(scan_event_t evt, const char *info, void *ctx)
         }
 
         case SCAN_EVT_ABORTED:
+            scr_scan_stop_elapsed();
             scr_home_set_state(SCAN_STATE_IDLE);
             screen_mgr_goto_home();
-            screen_mgr_show_toast("Scan aborted");
+            screen_mgr_show_toast("Scan aborted", TOAST_INFO);
             pstat_led_set(PSTAT_LED_READY,      true);
             pstat_led_set(PSTAT_LED_PROCESSING, false);
             break;
@@ -199,9 +203,9 @@ static void sink_on_event(scan_event_t evt, const char *info, void *ctx)
             scr_home_set_state(SCAN_STATE_ERROR);
             screen_mgr_goto_home();
             if (info) {
-                screen_mgr_show_toast(info);
+                screen_mgr_show_toast(info, TOAST_ERROR);
             } else {
-                screen_mgr_show_toast("Scan error — check params");
+                screen_mgr_show_toast("Scan error \u2014 check params", TOAST_ERROR);
             }
             pstat_led_set(PSTAT_LED_READY,      true);
             pstat_led_set(PSTAT_LED_PROCESSING, false);

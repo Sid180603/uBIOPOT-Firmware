@@ -7,6 +7,7 @@ idf_component_register(
     SRCS
         "src/calibration.c"
         "src/dpv.c"
+        "src/metal_id.c"
         "src/peaks.c"
         "src/protocol.c"
         "src/scan_state.c"

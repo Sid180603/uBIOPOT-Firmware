@@ -57,13 +57,17 @@ static volatile uint8_t s_ring_tail = 0;  /* read index  (LVGL timer)  */
 static lv_obj_t  *s_scr          = NULL;
 static lv_obj_t  *s_lbl_elec     = NULL;  /* "E1  DPV" in status bar */
 static lv_obj_t  *s_lbl_progress = NULL;  /* "10/240" step count */
-static lv_obj_t  *s_lbl_live_e   = NULL;  /* live potential display */
+static lv_obj_t  *s_lbl_elapsed  = NULL;  /* "M:SS" elapsed time (#13, replaces live V in bar) */
 static lv_obj_t  *s_lbl_live_i   = NULL;  /* live current display */
 static lv_obj_t  *s_lbl_proc     = NULL;  /* "⊙ MEASURING" / "Equilibrating..." */
 static lv_obj_t  *s_chart        = NULL;
 static lv_chart_series_t *s_series[3];    /* one per electrode */
 static lv_obj_t  *s_spinner      = NULL;  /* equilibration spinner */
 static lv_timer_t *s_flush_timer = NULL;  /* per-frame batch flush */
+static lv_timer_t *s_elapsed_timer = NULL; /* 1-second elapsed time ticker (#13) */
+
+/* Elapsed time counter (seconds since scan start) */
+static uint32_t s_elapsed_s = 0;
 
 /* Dynamic Y-axis range tracking */
 static int32_t s_y_min = -100;
@@ -149,15 +153,28 @@ static void flush_timer_cb(lv_timer_t *t)
         }
 
         /* Update live readouts */
-        char ibuf[20], ebuf[20];
+        char ibuf[20];
         snprintf(ibuf, sizeof(ibuf), "%+.1f µA", (float)pt.I_uA);
-        snprintf(ebuf, sizeof(ebuf), "%+.3f V",  (float)pt.E_mV / 1000.0f);
         lv_label_set_text(s_lbl_live_i, ibuf);
-        lv_label_set_text(s_lbl_live_e, ebuf);
         updated = true;
     }
 
     if (updated) lv_chart_refresh(s_chart);
+}
+
+/* -------------------------------------------------------------------------
+ * Elapsed time ticker (#13) — runs inside LVGL task, no lock needed
+ * ------------------------------------------------------------------------- */
+
+static void elapsed_timer_cb(lv_timer_t *t)
+{
+    (void)t;
+    if (!s_lbl_elapsed) return;
+    s_elapsed_s++;
+    char buf[16];   /* e.g. "99:59" = 5 chars; 16 bytes is safe */
+    snprintf(buf, sizeof(buf), "%u:%02u", (unsigned)(s_elapsed_s / 60),
+             (unsigned)(s_elapsed_s % 60));
+    lv_label_set_text(s_lbl_elapsed, buf);
 }
 
 /* -------------------------------------------------------------------------
@@ -179,7 +196,9 @@ lv_obj_t *scr_scan_create(lv_group_t *group)
     lv_obj_set_pos(bar, 0, 0);
     lv_obj_set_style_bg_color(bar, lv_color_hex(UI_COLOR_SURFACE), 0);
     lv_obj_set_style_bg_opa(bar, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(bar, 0, 0);
+    lv_obj_set_style_border_side(bar, LV_BORDER_SIDE_BOTTOM, 0);  /* #4: 1px bottom divider */
+    lv_obj_set_style_border_color(bar, lv_color_hex(UI_COLOR_BORDER), 0);
+    lv_obj_set_style_border_width(bar, 1, 0);
     lv_obj_set_style_pad_all(bar, 0, 0);
     lv_obj_set_style_radius(bar, 0, 0);
 
@@ -195,11 +214,12 @@ lv_obj_t *scr_scan_create(lv_group_t *group)
     lv_obj_set_style_text_font(s_lbl_progress, &lv_font_montserrat_14, 0);
     lv_obj_align(s_lbl_progress, LV_ALIGN_CENTER, 0, 0);
 
-    s_lbl_live_e = lv_label_create(bar);
-    lv_label_set_text(s_lbl_live_e, "+0.000 V");
-    lv_obj_set_style_text_color(s_lbl_live_e, lv_color_hex(UI_COLOR_TEXT), 0);
-    lv_obj_set_style_text_font(s_lbl_live_e, &lv_font_montserrat_14, 0);
-    lv_obj_align(s_lbl_live_e, LV_ALIGN_RIGHT_MID, -8, 0);
+    /* #13: Elapsed time replaces live voltage in bar (voltage shown in readout row) */
+    s_lbl_elapsed = lv_label_create(bar);
+    lv_label_set_text(s_lbl_elapsed, "0:00");
+    lv_obj_set_style_text_color(s_lbl_elapsed, lv_color_hex(UI_COLOR_DIM), 0);
+    lv_obj_set_style_text_font(s_lbl_elapsed, &lv_font_montserrat_14, 0);
+    lv_obj_align(s_lbl_elapsed, LV_ALIGN_RIGHT_MID, -8, 0);
 
     /* ── Chart ──────────────────────────────────────────────────── */
     s_chart = lv_chart_create(s_scr);
@@ -232,10 +252,23 @@ lv_obj_t *scr_scan_create(lv_group_t *group)
     s_series[1] = lv_chart_add_series(s_chart,
                                        lv_color_hex(UI_COLOR_PROC),
                                        LV_CHART_AXIS_PRIMARY_Y);
-    /* Electrode 3 series (green, hidden until used) */
+    /* Electrode 3 series (cool indigo — distinct from warm amber on 16-bit panel) #7 */
     s_series[2] = lv_chart_add_series(s_chart,
-                                       lv_color_hex(UI_COLOR_READY),
+                                       lv_color_hex(0x7986CBU),
                                        LV_CHART_AXIS_PRIMARY_Y);
+
+    /* #9: Axis labels — inside chart corners, DIM color */
+    lv_obj_t *ax_y = lv_label_create(s_scr);
+    lv_label_set_text(ax_y, "\u0394I (\u00b5A)");
+    lv_obj_set_style_text_color(ax_y, lv_color_hex(UI_COLOR_DIM), 0);
+    lv_obj_set_style_text_font(ax_y, &lv_font_montserrat_14, 0);
+    lv_obj_set_pos(ax_y, 8, 30);   /* top-left corner inside chart */
+
+    lv_obj_t *ax_x = lv_label_create(s_scr);
+    lv_label_set_text(ax_x, "E (V)");
+    lv_obj_set_style_text_color(ax_x, lv_color_hex(UI_COLOR_DIM), 0);
+    lv_obj_set_style_text_font(ax_x, &lv_font_montserrat_14, 0);
+    lv_obj_align(ax_x, LV_ALIGN_TOP_RIGHT, -10, 160);  /* bottom-right of chart */
 
     /* ── Equilibration spinner (hidden by default) ──────────────── */
     s_spinner = lv_spinner_create(s_scr);
@@ -267,6 +300,19 @@ lv_obj_t *scr_scan_create(lv_group_t *group)
     lv_obj_set_style_text_font(s_lbl_live_i, &lv_font_montserrat_20, 0);
     lv_obj_align(s_lbl_live_i, LV_ALIGN_LEFT_MID, 30, 0);
 
+    /* #13: Live potential stays in readout row (moved from status bar) */
+    lv_obj_t *e_lbl_hdr = lv_label_create(row);
+    lv_label_set_text(e_lbl_hdr, "E:");
+    lv_obj_set_style_text_color(e_lbl_hdr, lv_color_hex(UI_COLOR_DIM), 0);
+    lv_obj_set_style_text_font(e_lbl_hdr, &lv_font_montserrat_14, 0);
+    lv_obj_align(e_lbl_hdr, LV_ALIGN_CENTER, -24, 0);
+
+    lv_obj_t *lbl_live_e_row = lv_label_create(row);
+    lv_label_set_text(lbl_live_e_row, "+0.000V");
+    lv_obj_set_style_text_color(lbl_live_e_row, lv_color_hex(UI_COLOR_TEXT), 0);
+    lv_obj_set_style_text_font(lbl_live_e_row, &lv_font_montserrat_14, 0);
+    lv_obj_align(lbl_live_e_row, LV_ALIGN_CENTER, 10, 0);
+
     s_lbl_proc = lv_label_create(row);
     lv_label_set_text(s_lbl_proc, LV_SYMBOL_REFRESH "  MEASURING");
     lv_obj_set_style_text_color(s_lbl_proc, lv_color_hex(UI_COLOR_PROC), 0);
@@ -284,13 +330,17 @@ lv_obj_t *scr_scan_create(lv_group_t *group)
     lv_obj_set_style_radius(hbar, 0, 0);
 
     lv_obj_t *hint = lv_label_create(hbar);
-    lv_label_set_text(hint, "Hold START (2s) to abort");
+    lv_label_set_text(hint, "Hold to cancel");  /* #8: terse verb form */
     lv_obj_set_style_text_color(hint, lv_color_hex(UI_COLOR_DIM), 0);
     lv_obj_set_style_text_font(hint, &lv_font_montserrat_14, 0);
     lv_obj_align(hint, LV_ALIGN_CENTER, 0, 0);
 
     /* ── Per-frame flush timer ──────────────────────────────────── */
     s_flush_timer = lv_timer_create(flush_timer_cb, 33, NULL);  /* ~30 fps */
+
+    /* Elapsed time ticker — starts paused; scr_scan_reset() enables it */
+    s_elapsed_timer = lv_timer_create(elapsed_timer_cb, 1000, NULL);
+    lv_timer_pause(s_elapsed_timer);
 
     ESP_LOGI(TAG, "Scan screen created");
     return s_scr;
@@ -335,7 +385,10 @@ void scr_scan_reset(uint8_t electrode)
     /* Reset progress */
     if (s_lbl_progress) lv_label_set_text(s_lbl_progress, "0/---");
     if (s_lbl_live_i)   lv_label_set_text(s_lbl_live_i, "+0.0 µA");
-    if (s_lbl_live_e)   lv_label_set_text(s_lbl_live_e, "+0.000 V");
+    /* Reset + start elapsed time (#13) */
+    s_elapsed_s = 0;
+    if (s_lbl_elapsed)  lv_label_set_text(s_lbl_elapsed, "0:00");
+    if (s_elapsed_timer) { lv_timer_resume(s_elapsed_timer); lv_timer_reset(s_elapsed_timer); }
 
     /* Processing state */
     if (s_lbl_proc) {
@@ -378,4 +431,10 @@ void scr_scan_set_equilibrating(bool eq)
             start_proc_anim();
         }
     }
+}
+
+void scr_scan_stop_elapsed(void)
+{
+    if (s_elapsed_timer) lv_timer_pause(s_elapsed_timer);
+    stop_proc_anim();
 }

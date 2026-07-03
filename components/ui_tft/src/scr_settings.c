@@ -58,7 +58,7 @@ static void on_zero_btn(lv_event_t *e)
     (void)e;
     /* P8: trigger auto-zero via engine_zero() */
     /* For now, just show a toast acknowledging the tap */
-    screen_mgr_show_toast("Zero: coming in P8 (calibration)");
+    screen_mgr_show_toast("Zero: coming in P8 (calibration)", TOAST_INFO);
 }
 
 static void on_back_btn(lv_event_t *e)
@@ -85,7 +85,9 @@ lv_obj_t *scr_settings_create(lv_group_t *group)
     lv_obj_set_pos(bar, 0, 0);
     lv_obj_set_style_bg_color(bar, lv_color_hex(UI_COLOR_SURFACE), 0);
     lv_obj_set_style_bg_opa(bar, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(bar, 0, 0);
+    lv_obj_set_style_border_side(bar, LV_BORDER_SIDE_BOTTOM, 0);  /* #4: 1px bottom divider */
+    lv_obj_set_style_border_color(bar, lv_color_hex(UI_COLOR_BORDER), 0);
+    lv_obj_set_style_border_width(bar, 1, 0);
     lv_obj_set_style_pad_all(bar, 0, 0);
     lv_obj_set_style_radius(bar, 0, 0);
 
@@ -114,19 +116,33 @@ lv_obj_t *scr_settings_create(lv_group_t *group)
     make_row(s_scr, 76,  "IP:  ", &s_lbl_ip);
     make_row(s_scr, 100, "URL: ", &s_lbl_url);
 
-    /* Placeholder note for QR (P5 will replace) */
+    /* QR code placeholder (P5 wires real SSID/IP here) */
     lv_obj_t *qr_note = lv_label_create(s_scr);
-    lv_label_set_text(qr_note, "[ QR code — available after WiFi connected (P5) ]");
+    lv_label_set_text(qr_note, "[ QR — available after WiFi init (P5) ]");
     lv_obj_set_style_text_color(qr_note, lv_color_hex(UI_COLOR_DIM), 0);
     lv_obj_set_style_text_font(qr_note, &lv_font_montserrat_14, 0);
     lv_label_set_long_mode(qr_note, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(qr_note, LV_HOR_RES - 16);
     lv_obj_set_pos(qr_note, 8, 124);
 
-    /* ── Zero calibration button ────────────────────────────────── */
+    /* ── Calibration section header (#16) ───────────────────────── */
+    lv_obj_t *cal_hdr = lv_label_create(s_scr);
+    lv_label_set_text(cal_hdr, LV_SYMBOL_EDIT "  Calibration");
+    lv_obj_set_style_text_color(cal_hdr, lv_color_hex(UI_COLOR_ACCENT), 0);
+    lv_obj_set_style_text_font(cal_hdr, &lv_font_montserrat_14, 0);
+    lv_obj_set_pos(cal_hdr, 8, 152);
+
+    lv_obj_t *cal_div = lv_obj_create(s_scr);
+    lv_obj_set_size(cal_div, LV_HOR_RES - 16, 1);
+    lv_obj_set_pos(cal_div, 8, 169);
+    lv_obj_set_style_bg_color(cal_div, lv_color_hex(UI_COLOR_BORDER), 0);
+    lv_obj_set_style_bg_opa(cal_div, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(cal_div, 0, 0);
+
+    /* Zero button + calibration note */
     lv_obj_t *btn_zero = lv_btn_create(s_scr);
-    lv_obj_set_size(btn_zero, 120, 28);
-    lv_obj_set_pos(btn_zero, 8, 168);
+    lv_obj_set_size(btn_zero, 100, 26);
+    lv_obj_set_pos(btn_zero, 8, 173);
     lv_obj_set_style_bg_color(btn_zero, lv_color_hex(UI_COLOR_SURFACE), 0);
     lv_obj_set_style_bg_color(btn_zero, lv_color_hex(UI_COLOR_FOCUS), LV_STATE_FOCUSED);
     lv_obj_set_style_border_color(btn_zero, lv_color_hex(UI_COLOR_ACCENT), 0);
@@ -134,12 +150,17 @@ lv_obj_t *scr_settings_create(lv_group_t *group)
     lv_obj_set_style_radius(btn_zero, 6, 0);
     lv_obj_add_event_cb(btn_zero, on_zero_btn, LV_EVENT_CLICKED, NULL);
     if (group) lv_group_add_obj(group, btn_zero);
-
     lv_obj_t *zero_lbl = lv_label_create(btn_zero);
     lv_label_set_text(zero_lbl, LV_SYMBOL_POWER "  Zero");
     lv_obj_set_style_text_color(zero_lbl, lv_color_hex(UI_COLOR_TEXT), 0);
     lv_obj_set_style_text_font(zero_lbl, &lv_font_montserrat_14, 0);
     lv_obj_center(zero_lbl);
+
+    lv_obj_t *cal_note = lv_label_create(s_scr);
+    lv_label_set_text(cal_note, "[ Not calibrated ]");
+    lv_obj_set_style_text_color(cal_note, lv_color_hex(UI_COLOR_DIM), 0);
+    lv_obj_set_style_text_font(cal_note, &lv_font_montserrat_14, 0);
+    lv_obj_set_pos(cal_note, 116, 178);
 
     /* ── Hint bar ───────────────────────────────────────────────── */
     lv_obj_t *hbar = lv_obj_create(s_scr);

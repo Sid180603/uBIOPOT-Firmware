@@ -27,7 +27,7 @@ lv_obj_t *scr_results_create(lv_group_t *group);
 lv_obj_t *scr_settings_create(lv_group_t *group);
 
 /* Defined in scr_toast.c */
-void scr_toast_show(const char *msg);
+void scr_toast_show(const char *msg, toast_level_t level);
 
 /* -------------------------------------------------------------------------
  * Screen handles (created once, loaded on demand)
@@ -136,9 +136,9 @@ void screen_mgr_goto_settings(void)
     load_screen(s_scr_settings, LV_SCR_LOAD_ANIM_OVER_LEFT);
 }
 
-void screen_mgr_show_toast(const char *msg)
+void screen_mgr_show_toast(const char *msg, toast_level_t level)
 {
-    scr_toast_show(msg);
+    scr_toast_show(msg, level);
 }
 
 /* -------------------------------------------------------------------------

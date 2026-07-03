@@ -269,20 +269,22 @@ lv_obj_t *scr_home_create(lv_group_t *group)
     lv_obj_set_style_text_font(bar_name, &lv_font_montserrat_14, 0);
     lv_obj_align(bar_name, LV_ALIGN_LEFT_MID, 8, 0);
 
-    /* #15: Status dot (10×10 circle) + text label — centered in bar */
+    /* #15: Status dot (10×10 circle) + text label.
+     * Use LEFT_MID absolute offsets so the dot never overlaps the text.
+     * Dot spans x=108..118, label starts at x=124 (6px gap). */
     s_dot_status = lv_obj_create(bar);
     lv_obj_set_size(s_dot_status, 10, 10);
     lv_obj_set_style_radius(s_dot_status, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_color(s_dot_status, lv_color_hex(UI_COLOR_READY), 0);
     lv_obj_set_style_bg_opa(s_dot_status, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(s_dot_status, 0, 0);
-    lv_obj_align(s_dot_status, LV_ALIGN_CENTER, -34, 0);
+    lv_obj_align(s_dot_status, LV_ALIGN_LEFT_MID, 108, 0);
 
     s_lbl_status = lv_label_create(bar);
     lv_label_set_text(s_lbl_status, "READY");
     lv_obj_set_style_text_color(s_lbl_status, lv_color_hex(UI_COLOR_READY), 0);
     lv_obj_set_style_text_font(s_lbl_status, &lv_font_montserrat_14, 0);
-    lv_obj_align(s_lbl_status, LV_ALIGN_CENTER, -18, 0);
+    lv_obj_align(s_lbl_status, LV_ALIGN_LEFT_MID, 124, 0);
 
     s_lbl_elec = lv_label_create(bar);
     lv_label_set_text(s_lbl_elec, "E1");

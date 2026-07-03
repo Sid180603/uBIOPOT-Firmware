@@ -121,19 +121,16 @@ void pstat_led_set(int led, int on) { (void)led; (void)on; }
 
 void sim_main(lv_display_t *disp)
 {
-    /* Create encoder indev */
-    lv_group_t *grp = lv_group_create();
-    lv_group_set_default(grp);
-
+    /* Create encoder indev — screen_mgr_init (post-P4-review) takes the indev
+     * directly and manages per-screen groups internally. */
     s_indev = lv_indev_create();
     lv_indev_set_type(s_indev, LV_INDEV_TYPE_ENCODER);
     lv_indev_set_mode(s_indev, LV_INDEV_MODE_EVENT);
     lv_indev_set_read_cb(s_indev, encoder_read_cb);
     lv_indev_set_disp(s_indev, disp);
-    lv_indev_set_group(s_indev, grp);
 
-    /* Init all screens */
-    screen_mgr_init(disp, grp);
+    /* Init all screens — pass indev so screen_mgr can swap per-screen groups */
+    screen_mgr_init(disp, s_indev);
 
     printf("[SIM] uBIOPOT PC Simulator ready\n");
     printf("[SIM] Keys: Arrow/Right=NAV  Enter=SELECT  Escape=ABORT\n");

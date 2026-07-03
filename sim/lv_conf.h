@@ -199,7 +199,7 @@
 #define LV_USE_CHART        1  /* voltammogram! */
 #define LV_USE_CHECKBOX     0
 #define LV_USE_DROPDOWN     0
-#define LV_USE_IMAGE        0
+#define LV_USE_IMAGE        1  /* required by lv_canvas (which lv_qrcode needs) */
 #define LV_USE_IMAGEBUTTON  0
 #define LV_USE_KEYBOARD     0
 #define LV_USE_LABEL        1  /* everywhere */

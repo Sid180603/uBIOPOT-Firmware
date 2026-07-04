@@ -12,6 +12,10 @@
  *   screen_mgr_init(disp, enc) <- init screens; enc = mousewheel encoder from HAL
  *   while(1) lv_timer_handler() + usleep()   <- unchanged event loop
  *
+ * The synthetic DPV scan generates a four-metal voltammogram (Cd/Pb/Cu/Hg)
+ * and routes it through the real peaks_find() + metal_identify() pipeline,
+ * exercising the same detection + results-screen code as the device.
+ *
  * SDL events (mouse, keyboard, window close) are handled INTERNALLY by
  * LVGL's SDL driver during lv_timer_handler().  No SDL_PollEvent needed here.
  *
@@ -40,16 +44,39 @@
 #include "pstat_hal/pstat_hal.h"  /* for esp_err_t pstat_led_set(pstat_led_t, bool) */
 
 /* =========================================================================
- * Synthetic DPV scan — Pb²⁺ peak at −400 mV, σ = 80 mV, ΔI_peak = 50 µA.
- * Same Gaussian model used in host-test pyramid L3 / L7 (Wokwi cell sim).
+ * Synthetic DPV scan — four-metal voltammogram (Cd/Pb/Cu/Hg).
+ *
+ * Each metal is modelled as a Gaussian centred at its stripping potential:
+ *   I(E) = Σ A_k · exp(−(E − µ_k)² / (2σ²))
+ *
+ * Centers and amplitudes (σ = 70 mV throughout):
+ *   Cd  µ = −700 mV  A = 30 µA   window [−800, −600]
+ *   Pb  µ = −450 mV  A = 50 µA   window [−550, −400]  ← tallest / primary
+ *   Cu  µ =    0 mV  A = 25 µA   window [−100,  +50]
+ *   Hg  µ =  +300 mV  A = 18 µA   window [+200, +400]
+ *
+ * Peaks are 250–450 mV apart; each drops to < 1% of its height before the
+ * next begins — all four are cleanly separated for peaks_find().
+ *
+ * At scan end the buffer is passed to the *real* peaks_find() (threshold
+ * 5.0 µA gives 3.6× margin above the smallest real peak while rejecting
+ * noise when SIM_ADD_NOISE is enabled).
+ *
  * Points emitted at 200 ms intervals → full scan in ~40 s sim-time.
  * ========================================================================= */
+
+/* Set to 1 to add ±2 µA white noise (stress-tests the peak finder). */
+#define SIM_ADD_NOISE 0
+
+/* Four-metal table: { centre_mV, amplitude_uA } */
+static const float k_sim_mu[4]  = { -700.0f, -450.0f,   0.0f, +300.0f };
+static const float k_sim_amp[4] = {   30.0f,   50.0f,  25.0f,   18.0f };
+#define SIM_SIGMA 70.0f
 
 static int         s_step       = 0;
 static bool        s_scanning   = false;
 static lv_timer_t *s_scan_timer = NULL;
 
-/* ISSUE 1: store scan data so scr_results_set_curve() can draw mini voltammogram */
 #define SIM_SCAN_POINTS 200
 static float s_E_buf[SIM_SCAN_POINTS];
 static float s_I_buf[SIM_SCAN_POINTS];
@@ -62,20 +89,29 @@ static void synthetic_scan_cb(lv_timer_t *t)
         s_scan_timer = NULL;
         s_scanning   = false;
 
-        /* Announce results — Pb²⁺ peak at −400 mV / 50 µA on electrode 1 */
-        static peak_t peaks[1] = {{ .E_mV = -400.0f, .I_uA = 50.0f, .index = 80 }};
-        scr_results_set(peaks, 1, /*electrode=*/1);
-        /* ISSUE 1 fix: supply raw curve data for the mini voltammogram */
+        /* Run the real peak finder — same code path the device uses. */
+        static peak_t peaks[4];
+        uint16_t n_pk = peaks_find(s_I_buf, s_E_buf, SIM_SCAN_POINTS,
+                                   peaks, 4, 5.0f /* µA prominence */);
+        scr_results_set(peaks, n_pk, /*electrode=*/1);
         scr_results_set_curve(s_E_buf, s_I_buf, (uint16_t)SIM_SCAN_POINTS);
         screen_mgr_goto_results();
         return;
     }
 
-    float E = -1000.0f + (float)(s_step * 10);      /* −1000 → +990 mV      */
-    float I = 50.0f * expf(-(E + 400.0f) * (E + 400.0f)
-                           / (2.0f * 80.0f * 80.0f)); /* Gaussian at −400 mV */
+    float E = -1000.0f + (float)(s_step * 10);  /* −1000 → +990 mV */
 
-    s_E_buf[s_step] = E;   /* accumulate for set_curve */
+    /* Sum of four Gaussians */
+    float I = 0.0f;
+    for (int k = 0; k < 4; k++) {
+        float d = (E - k_sim_mu[k]) / SIM_SIGMA;
+        I += k_sim_amp[k] * expf(-0.5f * d * d);
+    }
+#if SIM_ADD_NOISE
+    I += 2.0f * ((float)rand() / (float)RAND_MAX - 0.5f) * 2.0f;  /* ±2 µA */
+#endif
+
+    s_E_buf[s_step] = E;
     s_I_buf[s_step] = I;
 
     scr_scan_push_point(E, I);

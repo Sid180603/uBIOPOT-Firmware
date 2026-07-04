@@ -413,6 +413,7 @@ void scr_scan_reset(uint8_t electrode)
     /* Reset progress */
     if (s_lbl_progress) lv_label_set_text(s_lbl_progress, "0/---");
     if (s_lbl_live_i)   lv_label_set_text(s_lbl_live_i, "+0.0 µA");
+    if (s_lbl_live_e)   lv_label_set_text(s_lbl_live_e, "+0.000V");
     /* Reset + start elapsed time (#13) */
     s_elapsed_s = 0;
     if (s_lbl_elapsed)  lv_label_set_text(s_lbl_elapsed, "0:00");

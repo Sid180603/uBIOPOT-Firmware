@@ -143,6 +143,25 @@ cp "$REPO/components/echem_core/include/echem_core/"*.h "$SIM/src/stubs/echem_co
 
 ---
 
+### Step 6b — Copy pure-C echem_core sources
+
+`peaks.c` and `metal_id.c` are pure C with no IDF dependencies. They must be compiled
+into the sim so that:
+- `scr_results.c` can resolve `metal_identify()` (which it calls to label each peak)
+- `main_sim.c` can call `peaks_find()` to detect peaks from the synthetic scan buffer
+
+```bash
+mkdir -p "$SIM/src/echem"
+cp "$REPO/components/echem_core/src/peaks.c"   "$SIM/src/echem/"
+cp "$REPO/components/echem_core/src/metal_id.c" "$SIM/src/echem/"
+```
+
+> `scan_state.c`, `dpv.c`, `calibration.c` are **not** needed — the sim only uses
+> enum constants from `scan_state.h` (no function calls) and stubs `engine_start/abort`
+> directly in `main_sim.c`.
+
+---
+
 ### Step 7 — Patch `CMakeLists.txt`
 
 Three edits are needed. Run this Python script once:
@@ -162,12 +181,14 @@ txt = txt.replace(
     'include_directories(${PROJECT_SOURCE_DIR}/src/stubs)'
 )
 
-# 2. Glob and add screen sources right after MAIN_SOURCES is defined
+# 2. Glob and add screen + echem sources right after MAIN_SOURCES is defined
 txt = txt.replace(
     'set(MAIN_SOURCES src/mouse_cursor_icon.c src/hal/hal.c)',
     'set(MAIN_SOURCES src/mouse_cursor_icon.c src/hal/hal.c)\n'
     'file(GLOB SCREEN_SOURCES "${PROJECT_SOURCE_DIR}/src/screens/*.c")\n'
-    'list(APPEND MAIN_SOURCES ${SCREEN_SOURCES})'
+    'list(APPEND MAIN_SOURCES ${SCREEN_SOURCES})\n'
+    'file(GLOB ECHEM_SOURCES  "${PROJECT_SOURCE_DIR}/src/echem/*.c")\n'
+    'list(APPEND MAIN_SOURCES ${ECHEM_SOURCES})'
 )
 
 # 3. Disable LVGL examples + demos (they need 15+ widgets we don't enable)
@@ -201,6 +222,7 @@ EOF
 |-------|-----|
 | Add `src/`, `src/screens/`, `src/stubs/` to include paths | Screen files use `#include "screen_mgr.h"` and `#include "esp_log.h"` — compiler needs to find them |
 | Glob `src/screens/*.c` into `MAIN_SOURCES` | CMake only knew about `src/main.c` + HAL — all 7 screen files need to be compiled |
+| Glob `src/echem/*.c` into `MAIN_SOURCES` | `peaks.c` + `metal_id.c` are pure-C echem_core files the sim calls directly |
 | `CONFIG_LV_BUILD_EXAMPLES/DEMOS=OFF` before `add_subdirectory(lvgl)` | Prevents LVGL from building 500+ example files that need widgets we've disabled |
 | Remove `lvgl::examples lvgl::demos lvgl::thorvg` from `MAIN_LIBS` | We replaced `main.c` with our own so these targets are unreferenced dead weight |
 | `$<BUILD_INTERFACE:...>` wrapper | CMake 3.12+ refuses raw absolute paths in PUBLIC include dirs of installed targets |
@@ -269,8 +291,8 @@ A **320×240 landscape window** appears on the Windows desktop (WSLg). Log outpu
 1. **Splash** — "Aqua-HMET" fades in
 2. **Home** — menu list; teal highlight on focused item
 3. Navigate to **Start DPV** → press Enter/middle-click
-4. **Scan-Live** — voltammogram draws left→right (Pb²⁺ peak at −400 mV)
-5. Scan completes → **Results** — peak −400 mV / 50 µA
+4. **Scan-Live** — voltammogram draws left→right (4 peaks: Cd/Pb/Cu/Hg)
+5. Scan completes → **Results** — primary peak Pb / −0.450 V / 50.0 µA; secondary P2: Cd, P3: Cu, P4: Hg
 6. Press **Enter** on "Run Again" → back to Home
 
 ---

@@ -62,7 +62,8 @@
  * 5.0 µA gives 3.6× margin above the smallest real peak while rejecting
  * noise when SIM_ADD_NOISE is enabled).
  *
- * Points emitted at 200 ms intervals → full scan in ~40 s sim-time.
+ * The sweep range and step size are derived from the DPV params passed
+ * to engine_start(), exactly like dpv_run() — no hardcoded E range.
  * ========================================================================= */
 
 /* Set to 1 to add ±2 µA white noise (stress-tests the peak finder). */
@@ -73,33 +74,36 @@ static const float k_sim_mu[4]  = { -700.0f, -450.0f,   0.0f, +300.0f };
 static const float k_sim_amp[4] = {   30.0f,   50.0f,  25.0f,   18.0f };
 #define SIM_SIGMA 70.0f
 
-static int         s_step       = 0;
-static bool        s_scanning   = false;
-static lv_timer_t *s_scan_timer = NULL;
+static dpv_params_t s_params;                   /* copy of DPV params driving the scan */
+static int          s_step        = 0;
+static int          s_total_steps = 0;
+static float        s_sign        = 1.0f;
+static bool         s_scanning    = false;
+static lv_timer_t  *s_scan_timer  = NULL;
 
-#define SIM_SCAN_POINTS 200
-static float s_E_buf[SIM_SCAN_POINTS];
-static float s_I_buf[SIM_SCAN_POINTS];
+static float s_E_buf[UI_CHART_MAX_PTS];
+static float s_I_buf[UI_CHART_MAX_PTS];
 
 static void synthetic_scan_cb(lv_timer_t *t)
 {
     (void)t;
-    if (s_step >= SIM_SCAN_POINTS) {
+    if (s_step >= s_total_steps) {
         lv_timer_del(s_scan_timer);
         s_scan_timer = NULL;
         s_scanning   = false;
 
         /* Run the real peak finder — same code path the device uses. */
         static peak_t peaks[4];
-        uint16_t n_pk = peaks_find(s_I_buf, s_E_buf, SIM_SCAN_POINTS,
+        uint16_t n_pk = peaks_find(s_I_buf, s_E_buf, (uint16_t)s_total_steps,
                                    peaks, 4, 5.0f /* µA prominence */);
         scr_results_set(peaks, n_pk, /*electrode=*/1);
-        scr_results_set_curve(s_E_buf, s_I_buf, (uint16_t)SIM_SCAN_POINTS);
+        scr_results_set_curve(s_E_buf, s_I_buf, (uint16_t)s_total_steps);
         screen_mgr_goto_results();
         return;
     }
 
-    float E = -1000.0f + (float)(s_step * 10);  /* −1000 → +990 mV */
+    /* E computed from stored params — same formula as dpv_run() */
+    float E = s_params.e_begin_mV + (float)s_step * s_sign * s_params.e_step_mV;
 
     /* Sum of four Gaussians */
     float I = 0.0f;
@@ -115,7 +119,7 @@ static void synthetic_scan_cb(lv_timer_t *t)
     s_I_buf[s_step] = I;
 
     scr_scan_push_point(E, I);
-    scr_scan_set_progress((uint16_t)(s_step + 1), SIM_SCAN_POINTS);
+    scr_scan_set_progress((uint16_t)(s_step + 1), (uint16_t)s_total_steps);
     s_step++;
 }
 
@@ -129,15 +133,25 @@ esp_err_t engine_start(uint8_t electrode, const dpv_params_t *params)
 {
     if (s_scanning) return -1;
 
+    /* Store params — the timer callback reads from this copy */
+    s_params = *params;
+
+    /* Derive sweep geometry — same formula as dpv_run() */
+    s_sign = (s_params.e_end_mV >= s_params.e_begin_mV) ? 1.0f : -1.0f;
+    float span = (s_params.e_end_mV - s_params.e_begin_mV) * s_sign;
+    s_total_steps = (int)floorf(span / s_params.e_step_mV) + 1;
+    if (s_total_steps <= 0) s_total_steps = 1;
+    if (s_total_steps > UI_CHART_MAX_PTS) s_total_steps = UI_CHART_MAX_PTS;
+
     s_step     = 0;
     s_scanning = true;
 
-    scr_scan_reset(electrode, params->e_begin_mV, params->e_end_mV);
+    scr_scan_reset(electrode, s_params.e_begin_mV, s_params.e_end_mV);
     scr_scan_set_equilibrating(false);   /* equilibration stubbed to instant */
     screen_mgr_goto_scan();
 
-    /* One data point every 200 ms — slow enough to watch the chart draw */
-    s_scan_timer = lv_timer_create(synthetic_scan_cb, 200, NULL);
+    /* One data point every 100 ms — ~28 s for 281 steps */
+    s_scan_timer = lv_timer_create(synthetic_scan_cb, 100, NULL);
     return 0; /* ESP_OK */
 }
 

@@ -43,8 +43,8 @@ static lv_obj_t  *s_lbl_status  = NULL;   /* "READY" / "RUNNING" text           
 static lv_obj_t  *s_lbl_elec    = NULL;   /* "Electrode: 1" in status bar          */
 static lv_group_t *s_grp        = NULL;
 static uint8_t    s_electrode   = 1;      /* Selected electrode (1-3; 0=All) */
-static float      s_e_begin_mV = -600.0f; /* Last-used DPV E range (mV) */
-static float      s_e_end_mV   =  600.0f;
+static float      s_e_begin_mV = -900.0f; /* Last-used DPV E range (mV) */
+static float      s_e_end_mV   =  500.0f;
 
 /* #15 — pulse animation handle (kept for cancel on state change) */
 static lv_anim_t  s_dot_anim;
@@ -200,8 +200,8 @@ static void menu_item_click(lv_event_t *e)
         case MENU_START_DPV: {
             /* Build default DPV params and start */
             dpv_params_t p = {
-                .e_begin_mV         = -600.0f,
-                .e_end_mV           =  600.0f,
+                .e_begin_mV         = -900.0f,
+                .e_end_mV           =  500.0f,
                 .e_step_mV          =    5.0f,
                 .e_pulse_mV         =   25.0f,
                 .t_pulse_ms         =   50,

@@ -246,11 +246,22 @@ Expected output ends with:
 
 No errors. If errors appear, see the Troubleshooting section below.
 
-**Subsequent rebuilds** (after editing a screen file) — just re-copy and rebuild:
+**Subsequent rebuilds** (after editing screen or sim files) — re-sync and rebuild:
 
 ```bash
-cp "$REPO/components/ui_tft/src/scr_scan.c" ~/aquahmet_sim/src/screens/
-cmake --build build -j$(nproc)   # ~2 seconds
+REPO="/c/Users/<your-username>/Documents/Coding/ST Thesis/uBIOPOT-Firmware"
+SIM=~/aquahmet_sim
+
+# Sync all sources that may have changed
+cp "$REPO/components/ui_tft/src/"scr_*.c       "$SIM/src/screens/"
+cp "$REPO/components/ui_tft/src/screen_mgr.c"  "$SIM/src/screens/"
+cp "$REPO/components/ui_tft/src/screen_mgr.h"  "$SIM/src/screens/"
+cp "$REPO/components/echem_core/include/echem_core/"*.h "$SIM/src/stubs/echem_core/"
+cp "$REPO/components/echem_core/src/peaks.c"   "$SIM/src/echem/"
+cp "$REPO/components/echem_core/src/metal_id.c" "$SIM/src/echem/"
+cp "$REPO/sim/main_sim.c" "$SIM/src/main.c"
+
+cmake --build "$SIM/build" -j$(nproc)   # ~2 seconds
 ```
 
 ---
@@ -291,20 +302,28 @@ A **320×240 landscape window** appears on the Windows desktop (WSLg). Log outpu
 1. **Splash** — "Aqua-HMET" fades in
 2. **Home** — menu list; teal highlight on focused item
 3. Navigate to **Start DPV** → press Enter/middle-click
-4. **Scan-Live** — voltammogram draws left→right (4 peaks: Cd/Pb/Cu/Hg)
+4. **Scan-Live** — voltammogram draws left→right across the full chart (4 peaks: Cd/Pb/Cu/Hg).
+   Sweep range −900 → +500 mV at 5 mV steps (281 points, ~28 s at 100 ms/point).
+   All 4 peaks visible as they form in real time.
 5. Scan completes → **Results** — primary peak Pb / −0.450 V / 50.0 µA; secondary P2: Cd, P3: Cu, P4: Hg
 6. Press **Enter** on "Run Again" → back to Home
+
+> The sim derives its sweep from the DPV params (same E formula as `dpv_run()`),
+> so the chart X-axis range always matches the data. The 100 ms timer interval is
+> cosmetic — on the real board each step takes 200 ms (ADC sampling time).
 
 ---
 
 ## Iterating on screen design
 
-Edit any screen file in `components/ui_tft/src/`, re-copy, and rebuild:
+Edit any screen file in `components/ui_tft/src/`, re-sync, and rebuild:
 
 ```bash
-# Edit scr_scan.c in VS Code, then:
-cp "$REPO/components/ui_tft/src/scr_scan.c" ~/aquahmet_sim/src/screens/
-cmake --build ~/aquahmet_sim/build -j$(nproc) && ~/aquahmet_sim/bin/main
+# Edit scr_scan.c in VS Code, then re-sync all changed files:
+cp "$REPO/components/ui_tft/src/"scr_*.c       "$SIM/src/screens/"
+cp "$REPO/components/ui_tft/src/screen_mgr.c"  "$SIM/src/screens/"
+cp "$REPO/components/ui_tft/src/screen_mgr.h"  "$SIM/src/screens/"
+cmake --build "$SIM/build" -j$(nproc) && "$SIM/bin/main"
 ```
 
 **Design on PC → verify on board.** The sim nails layout, animations, colours, and navigation

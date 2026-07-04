@@ -381,7 +381,7 @@ lv_obj_t *scr_scan_create(lv_group_t *group)
  * LVGL labels updated directly here since we ARE under lock when called.
  * ------------------------------------------------------------------------- */
 
-void scr_scan_reset(uint8_t electrode)
+void scr_scan_reset(uint8_t electrode, float e_begin_mV, float e_end_mV)
 {
     if (!s_scr) return;
 
@@ -397,7 +397,13 @@ void scr_scan_reset(uint8_t electrode)
     for (int i = 0; i < 3; i++) {
         if (s_series[i]) lv_chart_set_all_value(s_chart, s_series[i], LV_CHART_POINT_NONE);
     }
-    if (s_chart) lv_chart_set_axis_range(s_chart, LV_CHART_AXIS_PRIMARY_Y, s_y_min, s_y_max);
+    if (s_chart) {
+        lv_chart_set_axis_range(s_chart, LV_CHART_AXIS_PRIMARY_Y, s_y_min, s_y_max);
+        int32_t x_min = (int32_t)roundf(e_begin_mV < e_end_mV ? e_begin_mV : e_end_mV);
+        int32_t x_max = (int32_t)roundf(e_begin_mV < e_end_mV ? e_end_mV : e_begin_mV);
+        if (x_max <= x_min) x_max = x_min + 1;
+        lv_chart_set_axis_range(s_chart, LV_CHART_AXIS_PRIMARY_X, x_min, x_max);
+    }
 
     /* Update electrode label */
     if (s_lbl_elec) {

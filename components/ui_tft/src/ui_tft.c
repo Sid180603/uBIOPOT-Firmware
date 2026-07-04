@@ -162,7 +162,9 @@ static void sink_on_event(scan_event_t evt, const char *info, void *ctx)
             /* Sync electrode from home screen (BUG 1 fix: was always 1). */
             s_electrode = scr_home_get_electrode();
             s_pt_count = 0;
-            scr_scan_reset(s_electrode);
+            float eb, ee;
+            scr_home_get_e_range(&eb, &ee);
+            scr_scan_reset(s_electrode, eb, ee);
             /* Show equilibration spinner immediately — DPV always equilibrates
              * first; SCAN_EVT_EQUILIB_DONE will clear it (ISSUE 2 fix). */
             scr_scan_set_equilibrating(true);
@@ -236,7 +238,9 @@ static void sink_on_resync(const DataPoint *buf, uint16_t count,
     }
 
     /* Reconstruct scan: reset chart and replay all buffered points */
-    scr_scan_reset(s_electrode);
+    float eb, ee;
+    scr_home_get_e_range(&eb, &ee);
+    scr_scan_reset(s_electrode, eb, ee);
     s_pt_count = 0;
     for (uint16_t i = 0; i < count; i++) {
         scr_scan_push_point(buf[i].E_mV, buf[i].I_uA);

@@ -43,6 +43,8 @@ static lv_obj_t  *s_lbl_status  = NULL;   /* "READY" / "RUNNING" text           
 static lv_obj_t  *s_lbl_elec    = NULL;   /* "Electrode: 1" in status bar          */
 static lv_group_t *s_grp        = NULL;
 static uint8_t    s_electrode   = 1;      /* Selected electrode (1-3; 0=All) */
+static float      s_e_begin_mV = -600.0f; /* Last-used DPV E range (mV) */
+static float      s_e_end_mV   =  600.0f;
 
 /* #15 — pulse animation handle (kept for cancel on state change) */
 static lv_anim_t  s_dot_anim;
@@ -209,6 +211,8 @@ static void menu_item_click(lv_event_t *e)
                 .n_avg              =    5,
                 .electrode          = (electrode_t)s_electrode,
             };
+            s_e_begin_mV = p.e_begin_mV;
+            s_e_end_mV   = p.e_end_mV;
             esp_err_t ret = engine_start(s_electrode, &p);
             if (ret == ESP_OK) {
                 screen_mgr_goto_scan();
@@ -396,4 +400,10 @@ void scr_home_set_electrode(uint8_t electrode)
 uint8_t scr_home_get_electrode(void)
 {
     return s_electrode;
+}
+
+void scr_home_get_e_range(float *e_begin_mV, float *e_end_mV)
+{
+    if (e_begin_mV) *e_begin_mV = s_e_begin_mV;
+    if (e_end_mV)   *e_end_mV   = s_e_end_mV;
 }

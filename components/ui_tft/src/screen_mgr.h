@@ -90,8 +90,9 @@ void screen_mgr_show_toast(const char *msg, toast_level_t level);
  * Scan-live screen updates (called from the engine sink, already under lock)
  * ------------------------------------------------------------------------- */
 
-/** Clear the scan chart and reset live readouts. Called at scan_started. */
-void scr_scan_reset(uint8_t electrode);
+/** Clear the scan chart and reset live readouts. Called at scan_started.
+ *  e_begin/e_end set the chart X-axis range (mV). */
+void scr_scan_reset(uint8_t electrode, float e_begin_mV, float e_end_mV);
 
 /**
  * @brief  Add a DataPoint to the ring buffer.
@@ -115,6 +116,9 @@ void scr_scan_stop_elapsed(void);
  *         Used by the engine sink to synchronise s_electrode on SCAN_EVT_START.
  */
 uint8_t scr_home_get_electrode(void);
+
+/** Return the DPV E range currently configured on the home screen (mV). */
+void scr_home_get_e_range(float *e_begin_mV, float *e_end_mV);
 
 /* -------------------------------------------------------------------------
  * Results screen updates

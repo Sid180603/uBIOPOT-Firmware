@@ -127,13 +127,12 @@ static void synthetic_scan_cb(lv_timer_t *t)
 
 esp_err_t engine_start(uint8_t electrode, const dpv_params_t *params)
 {
-    (void)params;
     if (s_scanning) return -1;
 
     s_step     = 0;
     s_scanning = true;
 
-    scr_scan_reset(electrode);
+    scr_scan_reset(electrode, params->e_begin_mV, params->e_end_mV);
     scr_scan_set_equilibrating(false);   /* equilibration stubbed to instant */
     screen_mgr_goto_scan();
 

@@ -333,13 +333,7 @@ esp_err_t ui_tft_start(void)
     esp_lcd_panel_reset(panel_handle);   /* issues SPI SW-reset cmd 0x01 */
     esp_lcd_panel_init(panel_handle);
 
-    /*
-     * Hardware orientation: landscape 320×240.
-     * swap_xy=true, mirror_x=true sets MADCTL correctly for most ILI9341 breakouts.
-     * Adjust mirror_y if the image is flipped vertically on bench.
-     */
-    esp_lcd_panel_swap_xy(panel_handle, true);
-    esp_lcd_panel_mirror(panel_handle, true, false);
+    /* esp_lvgl_port owns MADCTL (rotation section in disp_cfg below). */
     esp_lcd_panel_invert_color(panel_handle, false);
     esp_lcd_panel_disp_on_off(panel_handle, true);
 
@@ -373,9 +367,9 @@ esp_err_t ui_tft_start(void)
         .vres          = TFT_V_RES,
         .monochrome    = false,
         .rotation = {
-            .swap_xy  = false,   /* HW rotation already done via MADCTL */
-            .mirror_x = false,
-            .mirror_y = false,
+            .swap_xy  = true,    /* landscape: port applies MV → panel 320 wide */
+            .mirror_x = true,
+            .mirror_y = true,
         },
         .flags = {
             .buff_dma    = true,    /* DMA-capable SRAM buffers */

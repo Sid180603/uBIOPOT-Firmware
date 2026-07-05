@@ -243,12 +243,60 @@ esp_err_t pstat_hal_selftest(const pstat_calib_t *cal)
 
     if (pass) {
         pstat_led_set(PSTAT_LED_READY, true);
-        ESP_LOGI(TAG, "======= HAL selftest PASSED — press buttons within 10 s =======");
+        ESP_LOGI(TAG, "======= HAL selftest PASSED — press buttons within 15 s =======");
     } else {
         pstat_led_set(PSTAT_LED_PROCESSING, true);
         ESP_LOGE(TAG, "======= HAL selftest FAILED =======");
     }
-    vTaskDelay(pdMS_TO_TICKS(10000));
+
+    /* ---- RAW GPIO button probe (bring-up diagnostic) --------------------
+     * Directly poll candidate button pins so we can see which physical GPIO
+     * the board's button pulls, independent of iot_button. Logs every edge.
+     * Candidates: START=GPIO14, NAV=GPIO0 (both used by old fw), plus GPIO15
+     * (alt BOARD_BUTTON_PIN) and a few commonly-wired spares.
+     */
+    static const int probe_pins[] = { 14, 0, 16, 17, 19, 27, 34, 35, 36, 39 };
+    const int n_probe = sizeof(probe_pins) / sizeof(probe_pins[0]);
+    int last[sizeof(probe_pins) / sizeof(probe_pins[0])];
+    int cand[sizeof(probe_pins) / sizeof(probe_pins[0])];
+    int cnt[sizeof(probe_pins) / sizeof(probe_pins[0])];
+    for (int i = 0; i < n_probe; i++) {
+        gpio_config_t pc = {
+            .pin_bit_mask = (1ULL << probe_pins[i]),
+            .mode         = GPIO_MODE_INPUT,
+            /* GPIO34-39 are input-only: NO internal pull. Others get pull-up. */
+            .pull_up_en   = (probe_pins[i] >= 34) ? GPIO_PULLUP_DISABLE : GPIO_PULLUP_ENABLE,
+            .pull_down_en = GPIO_PULLDOWN_DISABLE,
+            .intr_type    = GPIO_INTR_DISABLE,
+        };
+        gpio_config(&pc);
+        last[i] = gpio_get_level(probe_pins[i]);
+        cand[i] = last[i];
+        cnt[i]  = 0;
+    }
+    ESP_LOGI(TAG, "RAW button probe v2: press each button now (15 s). Idle levels:");
+    for (int i = 0; i < n_probe; i++) {
+        ESP_LOGI(TAG, "   GPIO%-2d = %d%s", probe_pins[i], last[i],
+                 (probe_pins[i] >= 34) ? "  (input-only, no pull — may float)" : "");
+    }
+    for (int t = 0; t < 300; t++) {          /* 300 * 50 ms = 15 s */
+        for (int i = 0; i < n_probe; i++) {
+            int lvl = gpio_get_level(probe_pins[i]);
+            /* Debounce: require 3 consecutive stable samples (150 ms) before logging. */
+            if (lvl == cand[i]) {
+                if (cnt[i] < 3) cnt[i]++;
+                if (cnt[i] == 3 && lvl != last[i]) {
+                    ESP_LOGW(TAG, ">>> GPIO%-2d changed %d -> %d  (button edge)",
+                             probe_pins[i], last[i], lvl);
+                    last[i] = lvl;
+                }
+            } else {
+                cand[i] = lvl;
+                cnt[i]  = 1;
+            }
+        }
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
     ESP_LOGI(TAG, "Button wait done.");
 
     return pass ? ESP_OK : ESP_FAIL;

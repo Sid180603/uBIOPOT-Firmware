@@ -10,6 +10,16 @@ LVGL is platform-agnostic. It draws pixels into a buffer and calls two hooks:
 
 Your actual screen code (`scr_splash.c`, `scr_home.c`, etc.) **compiles identically on both**. Only the platform glue differs.
 
+## What the sim can't catch (hardware-only)
+
+The sim uses CLIB malloc against the host's huge heap/stack, so two device-only issues are invisible here
+(both hit during the 2026-07-05 bring-up — see the main README *Hardware bring-up* section):
+
+- **LVGL allocator OOM** — on device, LVGL's builtin 64 KB TLSF pool can't hold 5 screens + Montserrat
+  14/20/28. The firmware sets `CONFIG_LV_USE_CLIB_MALLOC=y` so LVGL uses the full ESP-IDF heap.
+- **TFT orientation** — `esp_lvgl_port` owns MADCTL; set orientation in `lvgl_port_display_cfg_t.rotation`,
+  never via manual `esp_lcd_panel_swap_xy/mirror` (the port overrides them → distorted image).
+
 ## Setup (Windows)
 
 ### Prerequisites

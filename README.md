@@ -96,10 +96,10 @@ After the first build, commit the generated `dependencies.lock`:
 | Phase | Status | Description |
 |-------|--------|-------------|
 | P0 | ✅ Done | Scaffolding — repo, build system, component skeletons, host tests, CI |
-| P1 | ✅ Done | HAL + drivers (MCP4921 SPI DAC, ADS1115 I²C ADC, CD4066 mux, iot_button, LEDs, selftest) |
+| P1 | ✅ Done | HAL + drivers (MCP4921 SPI DAC, ADS1115 I²C ADC, CD4066 mux, iot_button, LEDs, selftest) — **selftest PASS on real ESP32-D0WD-V3** |
 | P2 | ✅ Done | Electrochemistry core + full DPV algorithm + Unity host tests (all 4 suites green) |
 | P3 | ✅ Done | Acquisition engine (FreeRTOS Core-1 AcqTask, Core-0 Dispatcher, server-auth buffer, sink API) |
-| P4 | ✅ Done | On-device LVGL UI (ILI9341, 2-button encoder nav, 6 screens, live voltammogram, engine sink) |
+| P4 | ✅ Done | On-device LVGL UI (ILI9341, 2-button encoder nav, 6 screens, live voltammogram, engine sink) — **display validated on real hardware** |
 | P5 | ⏳ | Connectivity (WiFi SoftAP+STA, captive portal, mDNS, WebSocket, HTTP API, LittleFS) |
 | P6 | ⏳ | Web SPA (uPlot, dark theme, live chart, CSV export/import overlay, Playwright tests) |
 | P7 | ⏳ | USB serial protocol (NDJSON, parity with web) — **publishable milestone** |
@@ -108,7 +108,24 @@ After the first build, commit the generated `dependencies.lock`:
 
 **Publishable milestone:** end of P7 — DPV working across TFT + WiFi web + USB serial simultaneously.
 
-**Build status (P4):** 1816/1816 objects, 623 KB binary, 60% flash free, 0 errors.
+**Build status (P4):** ~630 KB binary, 59% flash free, 0 errors.
+
+### Hardware bring-up (2026-07-05 · ESP32-D0WD-V3)
+
+First on-silicon validation of P1–P4:
+
+- **HAL selftest PASS** — MCP4921 DAC ramp, ADS1115 (`0x48`) reads, CD4066 mux cycle (T1→T2→T3), LED drive.
+- **TFT UI renders** — splash → home at 40 MHz SPI, correct orientation.
+
+Two firmware fixes were required for on-device operation (neither reproduces in the PC sim, which uses CLIB
+malloc + a huge host stack):
+
+1. **LVGL allocator** — the builtin 64 KB TLSF pool OOM'd while building 5 screens + Montserrat 14/20/28
+   (`lv_realloc` → NULL → assert spin → task-WDT reboot loop). Fixed with `CONFIG_LV_USE_CLIB_MALLOC=y` so
+   LVGL uses the full ESP-IDF heap (~180 KB). Main task stack also raised to 16384.
+2. **TFT orientation** — `esp_lvgl_port` re-applies `disp_cfg.rotation` to the panel via `esp_lcd`, overriding
+   any manual `esp_lcd_panel_swap_xy/mirror`. Set orientation **only** in `lvgl_port_display_cfg_t.rotation`
+   (`swap_xy/mirror_x/mirror_y = true` for this panel/mount) — manual MADCTL calls cause a stride-shear image.
 
 ---
 
@@ -134,6 +151,9 @@ navigation, synthetic DPV Gaussian voltammogram (Pb²⁺ peak at −400 mV), toa
 **What only the real board proves:** RGB565 byte-swap colour accuracy, 40 MHz SPI refresh smoothness,
 RAM budget under WiFi + LVGL simultaneously, physical button ergonomics.
 
+> **Validated on hardware (2026-07-05):** LVGL renders correctly on the ILI9341 at 40 MHz once the allocator
+> (CLIB) and orientation (`lvgl_port` rotation) were fixed — see **Hardware bring-up** above.
+
 ---
 
 ## P1 Bench Bringup Checklist
@@ -150,13 +170,13 @@ Selftest sequence (automated, ~40 s):
 4. **Mux cycle** — T1→T2→T3→off, 100 ms each — verify with oscilloscope (only one HIGH at a time)
 5. **Button wait** — 10 s window; press START (GPIO14) or NAV (GPIO0) to log debounce events
 
-**P1 DoD** (hardware bench):
-- [ ] `i2c_master_probe(0x48)` → `ADS1115 ADC init OK` in serial log
-- [ ] DAC output linear: code 0→4095 tracks Vout 0→3.3 V (DMM)
-- [ ] ADS1115 reads a known reference voltage correctly
-- [ ] Mux lines isolate: only one of T1/T2/T3 HIGH at a time (scope)
-- [ ] START + NAV buttons log single-click and long-press events
-- [ ] READY LED = GPIO12 boots clean (no strapping fault)
+**P1 DoD** (hardware bench) — selftest **PASS** on ESP32-D0WD-V3 (2026-07-05):
+- [x] `ADS1115 ADC init OK` (`0x48` ACK) in serial log
+- [x] DAC ramp 0→4095 executed (selftest log) — DMM linearity check pending on final wired unit
+- [x] ADS1115 reads current (AIN1) + voltage (AIN0) channels
+- [x] Mux cycles T1→T2→T3 — scope isolation check pending on final unit
+- [ ] START + NAV buttons — **unwired on the demo unit** (hardware, not firmware); verify on final build
+- [x] READY LED = GPIO12 boots clean (no strapping fault); LED visibility pending on final wired unit
 
 ---
 

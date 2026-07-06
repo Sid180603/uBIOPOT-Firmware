@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aqua-HMET Potentiostat</title>
+<style>
+  :root { --bg:#1a1a2e; --surface:#16213e; --accent:#0f3460; --teal:#00b4d8; --text:#e0e0e0; --dim:#888; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--bg); color:var(--text); font-family:'Segoe UI',sans-serif; min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1.5rem; padding:2rem; }
+  h1 { color:var(--teal); font-size:1.6rem; letter-spacing:.05em; }
+  .card { background:var(--surface); border:1px solid var(--accent); border-radius:12px; padding:1.5rem; width:min(480px,100%); }
+  .status { display:flex; align-items:center; gap:.75rem; }
+  .dot { width:12px; height:12px; border-radius:50%; background:#888; flex-shrink:0; }
+  .dot.connected { background:#4caf50; }
+  .dot.running { background:#ff9800; animation:pulse 1s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  #state-txt { font-size:.9rem; color:var(--dim); }
+  #chart-area { width:100%; height:200px; background:var(--accent); border-radius:8px; margin-top:1rem;
+    display:flex; align-items:center; justify-content:center; color:var(--dim); font-size:.85rem; }
+  .btn-row { display:flex; gap:.75rem; margin-top:1rem; flex-wrap:wrap; }
+  button { flex:1; padding:.6rem 1rem; border:1px solid var(--teal); background:transparent;
+    color:var(--teal); border-radius:6px; cursor:pointer; font-size:.9rem; transition:background .2s; }
+  button:hover { background:rgba(0,180,216,.15); }
+  button:disabled { opacity:.4; cursor:not-allowed; }
+  #log { font-size:.75rem; color:var(--dim); max-height:120px; overflow-y:auto; margin-top:.75rem;
+    background:var(--accent); border-radius:6px; padding:.5rem; white-space:pre-wrap; font-family:monospace; }
+  a { color:var(--teal); text-decoration:none; }
+  .hint { font-size:.8rem; color:var(--dim); text-align:center; }
+</style>
+</head>
+<body>
+<h1>⚗ Aqua-HMET</h1>
+<p class="hint">DPV Heavy Metal Detector — v1.0.0</p>
+
+<div class="card">
+  <div class="status">
+    <div class="dot" id="ws-dot"></div>
+    <span id="state-txt">Connecting…</span>
+  </div>
+
+  <div id="chart-area">Live chart (P6 SPA)</div>
+
+  <div class="btn-row">
+    <button id="btn-start" disabled onclick="startScan()">▶ Start DPV</button>
+    <button id="btn-abort" disabled onclick="abortScan()">■ Abort</button>
+    <button id="btn-csv"   disabled onclick="downloadCSV()">⬇ CSV</button>
+  </div>
+
+  <div id="log"></div>
+</div>
+
+<p class="hint">Full SPA arrives in P6. For now: WebSocket + REST API active.<br>
+  <a href="/api/state">GET /api/state</a> · <a href="/api/scan.csv">GET /api/scan.csv</a>
+</p>
+
+<script>
+const log = (msg) => {
+  const el = document.getElementById('log');
+  const ts = new Date().toLocaleTimeString();
+  el.textContent += `[${ts}] ${msg}\n`;
+  el.scrollTop = el.scrollHeight;
+};
+
+const dot = document.getElementById('ws-dot');
+const stateTxt = document.getElementById('state-txt');
+const btnStart = document.getElementById('btn-start');
+const btnAbort = document.getElementById('btn-abort');
+const btnCsv   = document.getElementById('btn-csv');
+
+let ws = null;
+let pts = 0;
+
+function connect() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}/ws`);
+  ws.binaryType = 'arraybuffer';
+
+  ws.onopen = () => {
+    dot.className = 'dot connected';
+    stateTxt.textContent = 'Connected — IDLE';
+    btnStart.disabled = false;
+    btnCsv.disabled = false;
+    log('WebSocket connected');
+  };
+
+  ws.onclose = () => {
+    dot.className = 'dot';
+    stateTxt.textContent = 'Disconnected — retrying…';
+    btnStart.disabled = true; btnAbort.disabled = true;
+    log('WebSocket closed — retrying in 3s');
+    setTimeout(connect, 3000);
+  };
+
+  ws.onerror = (e) => log('WS error: ' + e.type);
+
+  ws.onmessage = (ev) => {
+    if (ev.data instanceof ArrayBuffer) {
+      // Binary DataPoint frame (16 bytes)
+      const dv = new DataView(ev.data);
+      if (dv.byteLength < 16) return;
+      const type = dv.getUint8(0);
+      if (type !== 0x01) return;
+      const elec = dv.getUint8(1);
+      const idx  = dv.getUint16(2, true);
+      const E    = dv.getFloat32(4, true).toFixed(3);
+      const I    = dv.getFloat32(8, true).toFixed(2);
+      pts++;
+      if (pts % 10 === 0) log(`pt#${idx} E=${E}V dI=${I}µA (e${elec})`);
+    } else {
+      try {
+        const j = JSON.parse(ev.data);
+        if (j.t === 'event') {
+          log(`event: ${j.name}${j.msg ? ' — '+j.msg : ''}`);
+          if (j.name === 'scan_started') {
+            pts = 0;
+            dot.className = 'dot running';
+            stateTxt.textContent = 'RUNNING…';
+            btnStart.disabled = true; btnAbort.disabled = false;
+          } else if (j.name === 'scan_complete' || j.name === 'scan_aborted') {
+            dot.className = 'dot connected';
+            stateTxt.textContent = j.name === 'scan_complete' ? `Done — ${pts} pts` : 'Aborted';
+            btnStart.disabled = false; btnAbort.disabled = true;
+          } else if (j.name === 'scan_error') {
+            dot.className = 'dot connected';
+            stateTxt.textContent = 'Error: ' + (j.msg||'');
+            btnStart.disabled = false; btnAbort.disabled = true;
+          }
+        } else if (j.t === 'hello') {
+          log(`hello fw=${j.fw} proto=${j.proto}`);
+        } else if (j.t === 'resync_complete') {
+          log(`resync: ${j.pts} pts, state=${j.state}`);
+        } else {
+          log(ev.data.substring(0, 120));
+        }
+      } catch(e) { log('bad json: ' + ev.data.substring(0,60)); }
+    }
+  };
+}
+
+function startScan() {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({ cmd:'start', technique:'DPV', electrode:1,
+    params:{ e_begin_mV:-500, e_end_mV:500, e_step_mV:5,
+             e_pulse_mV:25, t_pulse_ms:50, t_period_ms:200, t_equilibration_ms:2000 } }));
+  log('→ start DPV');
+}
+
+function abortScan() {
+  if (ws && ws.readyState === WebSocket.OPEN) { ws.send('{"cmd":"abort"}'); log('→ abort'); }
+}
+
+function downloadCSV() {
+  window.location.href = '/api/scan.csv';
+}
+
+connect();
+</script>
+</body>
+</html>

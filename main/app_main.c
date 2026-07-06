@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include "esp_log.h"
+#include "nvs_flash.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "pstat_hal/pstat_hal.h"
@@ -7,6 +8,7 @@
 #include "echem_core/technique.h"
 #include "acq_engine.h"
 #include "ui_tft.h"
+#include "net_comms.h"
 
 static const char *TAG = "aqua-hmet";
 
@@ -59,7 +61,7 @@ void app_main(void)
      * Remaining startup (filled in phase by phase):
      * P8: settings_load(&s_cal) -- load calibration + WiFi creds from NVS
      * P4: ui_tft_start()        -- init ILI9341 + LVGL + 2-button encoder nav  ← DONE
-     * P5: net_comms_start()     -- WiFi APSTA + captive portal + mDNS + HTTP + WebSocket
+     * P5: net_comms_start()     -- WiFi APSTA + captive portal + mDNS + HTTP + WebSocket ← DONE
      * P7: serial_comms_start()  -- UART0 NDJSON sink + RX command task
      */
 
@@ -68,6 +70,24 @@ void app_main(void)
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "ui_tft_start FAILED: %s -- display will be blank", esp_err_to_name(ret));
         /* Non-fatal: device still runs scans via serial/WiFi (P5/P7) */
+    }
+
+    /* ---- NVS (required by WiFi for PHY calibration + credential storage) ---- */
+    ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_LOGW(TAG, "NVS partition truncated — erasing and re-init");
+        nvs_flash_erase();
+        ret = nvs_flash_init();
+    }
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "nvs_flash_init FAILED: %s", esp_err_to_name(ret));
+    }
+
+    /* ---- P5: WiFi APSTA + captive portal + mDNS + HTTP + WebSocket ---- */
+    ret = net_comms_start();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "net_comms_start FAILED: %s -- WiFi unavailable", esp_err_to_name(ret));
+        /* Non-fatal: TFT UI and serial (P7) still work */
     }
 
     for (;;) {

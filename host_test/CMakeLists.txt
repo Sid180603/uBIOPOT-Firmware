@@ -56,3 +56,19 @@ add_unity_test(test_dpv          test_dpv.c)
 add_unity_test(test_protocol     test_protocol.c)
 add_unity_test(test_peaks        test_peaks.c)
 add_unity_test(test_scan_state   test_scan_state.c)
+
+# ==============================================================================
+# P5 net_comms protocol tests
+# Only includes net_comms_protocol.h (pure header, no IDF sources needed).
+# Tests: WS binary frame layout, MIME types, path traversal, CSV format, constants.
+# ==============================================================================
+set(NET_COMMS_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/../components/net_comms/include")
+
+add_executable(test_net_comms test_net_comms.c)
+target_include_directories(test_net_comms PRIVATE
+    "${NET_COMMS_INCLUDE}"
+    "${unity_SOURCE_DIR}/src"
+)
+target_link_libraries(test_net_comms PRIVATE unity m)
+target_compile_options(test_net_comms PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME test_net_comms COMMAND test_net_comms)

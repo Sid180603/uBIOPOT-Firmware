@@ -69,3 +69,41 @@ jobs:
             exit 1
           fi
           echo "PASS: echem_core is clean (no esp_*/FreeRTOS #include directives)"
+
+  # ============================================================================
+  # Job 3: L5 Protocol conformance tests (Python pytest, no hardware)
+  # Tests the P5 WebSocket binary wire format, JSON event schema, CSV format,
+  # and mock WS server interaction.  All tests run in-process — no device needed.
+  # Skips live-device tests (Section C) since AQUAHMET_HOST is not set in CI.
+  # ============================================================================
+  protocol-conformance:
+    name: L5 Protocol Conformance Tests (Python pytest)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install test dependencies
+        run: pip install -r test/requirements.txt
+
+      - name: Run L5 protocol conformance tests (no device)
+        run: pytest test/test_p5_protocol.py -v -k "not device" --tb=short
+
+      - name: Verify net_comms_protocol.h is IDF-free (host-testable invariant)
+        run: |
+          echo "=== Checking net_comms_protocol.h for forbidden #include directives ==="
+          if grep -n '^#include.*esp_' components/net_comms/include/net_comms_protocol.h; then
+            echo "FAIL: net_comms_protocol.h includes esp_* — breaks host testability"
+            exit 1
+          fi
+          if grep -n '^#include.*freertos\|^#include.*FreeRTOS' components/net_comms/include/net_comms_protocol.h; then
+            echo "FAIL: net_comms_protocol.h includes FreeRTOS — breaks host testability"
+            exit 1
+          fi
+          echo "PASS: net_comms_protocol.h is IDF-free"

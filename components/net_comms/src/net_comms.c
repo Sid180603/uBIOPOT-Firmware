@@ -19,6 +19,7 @@
  */
 
 #include "net_comms.h"
+#include "net_comms_protocol.h"   /* pure wire-format defs, IDF-free */
 #include "acq_engine.h"
 #include "echem_core/scan_state.h"
 #include "echem_core/dpv.h"
@@ -94,26 +95,9 @@ static SemaphoreHandle_t s_scan_mutex = NULL;
 /* Sink handle (kept so we can pass ctx=&s_net_sink to engine) */
 static engine_sink_t s_net_sink;
 
-/* --------------------------------------------------------------------------
- * Binary WS DataPoint wire format (16 bytes, little-endian)
- * Byte 0   : frame_type = 0x01 (DataPoint)
- * Byte 1   : electrode  (uint8)
- * Byte 2-3 : idx        (uint16 LE)
- * Byte 4-7 : E_mV       (float32 LE)
- * Byte 8-11: I_uA       (float32 LE)
- * Byte12-15: RE_mV      (float32 LE)
- * -------------------------------------------------------------------------- */
-
-#define WS_FRAME_TYPE_DATAPOINT  0x01u
-
-typedef struct __attribute__((packed)) {
-    uint8_t  frame_type;    /* always WS_FRAME_TYPE_DATAPOINT */
-    uint8_t  electrode;
-    uint16_t idx;
-    float    E_mV;
-    float    I_uA;
-    float    RE_mV;
-} ws_dp_frame_t;
+/* Binary frame type alias — uses definitions from net_comms_protocol.h */
+typedef net_ws_dp_frame_t ws_dp_frame_t;
+#define WS_FRAME_TYPE_DATAPOINT  NET_WS_FRAME_TYPE_DATAPOINT
 
 /* --------------------------------------------------------------------------
  * WS async-send work struct (heap-allocated; freed by work function)
@@ -590,13 +574,11 @@ static esp_err_t api_abort_handler(httpd_req_t *req)
 
 static esp_err_t api_csv_handler(httpd_req_t *req)
 {
-    httpd_resp_set_type(req, "text/csv");
-    httpd_resp_set_hdr(req, "Content-Disposition",
-                       "attachment; filename=\"aquahmet_scan.csv\"");
+    httpd_resp_set_type(req, NET_CSV_MIME);
+    httpd_resp_set_hdr(req, "Content-Disposition", NET_CSV_DISPOSITION);
 
     /* Write header */
-    const char *header = "electrode,idx,E_mV,I_uA,RE_mV\r\n";
-    httpd_resp_send_chunk(req, header, strlen(header));
+    httpd_resp_send_chunk(req, NET_CSV_HEADER, strlen(NET_CSV_HEADER));
 
     /* Write data */
     if (xSemaphoreTake(s_scan_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
@@ -699,27 +681,10 @@ static esp_err_t api_wifi_handler(httpd_req_t *req)
 
 /* --------------------------------------------------------------------------
  * Static file server (LittleFS assets for P6 SPA)
+ *
+ * ends_with(), net_content_type(), net_path_is_traversal() all come from
+ * net_comms_protocol.h (inline, pure C, host-testable).
  * -------------------------------------------------------------------------- */
-
-static bool ends_with(const char *s, const char *suffix)
-{
-    size_t slen = strlen(s);
-    size_t xlen = strlen(suffix);
-    return slen >= xlen && strcmp(s + slen - xlen, suffix) == 0;
-}
-
-static const char *get_content_type(const char *path)
-{
-    if (ends_with(path, ".html")) return "text/html";
-    if (ends_with(path, ".css"))  return "text/css";
-    if (ends_with(path, ".js"))   return "application/javascript";
-    if (ends_with(path, ".json")) return "application/json";
-    if (ends_with(path, ".ico"))  return "image/x-icon";
-    if (ends_with(path, ".png"))  return "image/png";
-    if (ends_with(path, ".svg"))  return "image/svg+xml";
-    if (ends_with(path, ".csv"))  return "text/csv";
-    return "text/plain";
-}
 
 /* Try path as-is, then path.gz, then path/index.html, then /index.html */
 static esp_err_t serve_file(httpd_req_t *req, const char *filepath)
@@ -742,7 +707,7 @@ static esp_err_t serve_file(httpd_req_t *req, const char *filepath)
     FILE *f = fopen(actual_path, "rb");
     if (!f) return ESP_FAIL;
 
-    httpd_resp_set_type(req, get_content_type(filepath));
+    httpd_resp_set_type(req, net_content_type(filepath));
     if (gzip) {
         httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
     }
@@ -771,7 +736,7 @@ static esp_err_t file_server_handler(httpd_req_t *req)
     if (qs) *qs = '\0';
 
     /* Reject path traversal */
-    if (strstr(uri_clean, "..")) {
+    if (net_path_is_traversal(uri_clean)) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid path");
         return ESP_OK;
     }

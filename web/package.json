@@ -1,0 +1,21 @@
+{
+  "name": "aquahmet-spa",
+  "version": "1.0.0",
+  "description": "Aqua-HMET DPV Potentiostat Web SPA — P6",
+  "private": true,
+  "scripts": {
+    "dev":     "vite src",
+    "build":   "vite build",
+    "preview": "vite preview --outDir dist",
+    "test":    "playwright test",
+    "test:ui": "playwright test --ui"
+  },
+  "dependencies": {
+    "uplot": "^1.6.31"
+  },
+  "devDependencies": {
+    "vite": "^5.4.0",
+    "vite-plugin-compression": "^0.5.1",
+    "@playwright/test": "^1.45.0"
+  }
+}

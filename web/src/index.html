@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aqua-HMET — DPV Potentiostat</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- Top status bar -->
+  <div id="topbar">
+    <h1>⚗ Aqua-HMET</h1>
+    <div id="ws-status">
+      <div class="status-dot" id="dot"></div>
+      <span id="ws-label">Connecting…</span>
+      <span id="pts-count" style="margin-left:8px;display:none">
+        <span id="pts-val">0</span> pts
+      </span>
+    </div>
+  </div>
+
+  <!-- Main grid: left panel + right panel -->
+  <div id="main">
+
+    <!-- ── Left: controls ─────────────────────────────────────────────── -->
+    <div id="panel-left">
+
+      <!-- DPV parameters form -->
+      <div class="card" id="params-card">
+        <div class="card-title">DPV Parameters</div>
+        <form id="dpv-form" novalidate>
+          <div class="field" id="f-e-begin">
+            <label>E begin (mV)</label>
+            <input type="number" id="e-begin" value="-500" step="10">
+            <div class="err">Must be within ±1000 mV</div>
+          </div>
+          <div class="field" id="f-e-end">
+            <label>E end (mV)</label>
+            <input type="number" id="e-end" value="500" step="10">
+            <div class="err">Must be within ±1000 mV</div>
+          </div>
+          <div class="field" id="f-e-step">
+            <label>E step (mV)</label>
+            <input type="number" id="e-step" value="5" step="1" min="1">
+            <div class="err">Must be > 0</div>
+          </div>
+          <div class="field" id="f-e-pulse">
+            <label>E pulse amplitude (mV)</label>
+            <input type="number" id="e-pulse" value="25" step="5" min="1">
+            <div class="err">Must be > 0</div>
+          </div>
+          <div class="field">
+            <label>t pulse (ms)</label>
+            <input type="number" id="t-pulse" value="50" step="10" min="1">
+          </div>
+          <div class="field" id="f-t-period">
+            <label>t period (ms)</label>
+            <input type="number" id="t-period" value="200" step="10" min="2">
+            <div class="err">Must exceed t pulse</div>
+          </div>
+          <div class="field">
+            <label>Equilibration (ms)</label>
+            <input type="number" id="t-equil" value="2000" step="500" min="0">
+          </div>
+          <div class="field">
+            <label>Electrode</label>
+            <select id="electrode">
+              <option value="1">Electrode 1</option>
+              <option value="2">Electrode 2</option>
+              <option value="3">Electrode 3</option>
+              <option value="0">All (sequential)</option>
+            </select>
+          </div>
+        </form>
+
+        <div class="btn-row" style="margin-top:10px">
+          <button class="btn btn-primary" id="btn-start" data-testid="btn-start" disabled>
+            ▶ Start DPV
+          </button>
+          <button class="btn btn-danger" id="btn-abort" data-testid="btn-abort" disabled>
+            ■ Abort
+          </button>
+        </div>
+      </div>
+
+      <!-- Electrode / connection info -->
+      <div class="card">
+        <div class="card-title">Connection</div>
+        <div class="field">
+          <label>Device</label>
+          <span id="device-url" style="font-size:0.8rem;color:var(--dim)">—</span>
+        </div>
+        <div class="field">
+          <label>FW / Protocol</label>
+          <span id="fw-info" style="font-size:0.8rem;color:var(--dim)">—</span>
+        </div>
+      </div>
+
+      <!-- Reference CSV import (Option-B overlay) -->
+      <div class="card">
+        <div class="card-title">Reference Overlay</div>
+        <p style="font-size:0.75rem;color:var(--dim);margin-bottom:8px">
+          Import commercial instrument CSV to overlay for thesis comparison.
+        </p>
+        <div class="btn-row">
+          <label class="btn" style="cursor:pointer">
+            ⬆ Import CSV
+            <input type="file" accept=".csv,.txt" id="ref-file" style="display:none">
+          </label>
+          <button class="btn" id="btn-clear-ref" disabled>✕ Clear</button>
+        </div>
+        <div id="ref-info" style="font-size:0.75rem;color:var(--dim);margin-top:6px"></div>
+      </div>
+
+    </div>
+
+    <!-- ── Right: chart + results ──────────────────────────────────────── -->
+    <div id="panel-right">
+
+      <!-- Chart card -->
+      <div class="card" style="flex:1;min-height:0;display:flex;flex-direction:column">
+        <div class="card-title" style="margin-bottom:6px">
+          Voltammogram (dI vs E)
+          <span style="float:right">
+            <span class="toggle-row">
+              X-axis:
+              <button class="btn active" id="xaxis-cmd"  data-axis="cmd"
+                      style="padding:2px 8px;font-size:0.75rem">Commanded V</button>
+              <button class="btn"       id="xaxis-re"   data-axis="re"
+                      style="padding:2px 8px;font-size:0.75rem">Measured RE</button>
+            </span>
+          </span>
+        </div>
+
+        <!-- Live readout -->
+        <div id="readout" style="margin-bottom:8px">
+          E: <span id="live-e">—</span> mV &nbsp;
+          ΔI: <span id="live-i">—</span> µA &nbsp;
+          Electrode: <span id="live-elec">—</span>
+        </div>
+
+        <!-- uPlot chart container -->
+        <div id="chart-wrap">
+          <div id="chart-container" data-testid="chart-container"></div>
+        </div>
+
+        <!-- Reference legend (shown when overlay active) -->
+        <div id="ref-legend" style="display:none;margin-top:6px" class="ref-legend">
+          <div class="ref-swatch"></div> Reference (imported)
+        </div>
+      </div>
+
+      <!-- Peaks + CSV export card -->
+      <div class="card">
+        <div class="card-title">
+          Peak Detection
+          <span style="float:right">
+            <button class="btn" id="btn-csv" data-testid="btn-csv" disabled
+                    style="padding:3px 10px;font-size:0.75rem">⬇ Export CSV</button>
+          </span>
+        </div>
+        <div id="peaks-list">
+          <div style="color:var(--dim);font-size:0.8rem" id="peaks-empty">
+            No peaks detected — run a DPV scan.
+          </div>
+        </div>
+
+        <!-- Manual concentration (requires calibration slope stored in NVS via P8) -->
+        <div id="conc-section" style="display:none;margin-top:10px">
+          <div class="card-title" style="margin-top:10px">Concentration (optional)</div>
+          <p style="font-size:0.75rem;color:var(--dim);margin-bottom:8px">
+            Requires calibration slope m (µA/µM) — set via device calibration (P8).
+          </p>
+          <div id="conc-list"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script type="module" src="./main.js"></script>
+</body>
+</html>

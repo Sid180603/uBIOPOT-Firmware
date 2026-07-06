@@ -2,8 +2,14 @@ cmake_minimum_required(VERSION 3.16)
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(aquahmet)
 
-# Build LittleFS image from web/ directory and flash it together with the app.
-# The image is written to the 'littlefs' partition defined in partitions.csv.
-# In P6 this directory will contain the minified+gzipped SPA; for P5 it holds
-# the placeholder index.html that exercises the WebSocket API.
-littlefs_create_partition_image(littlefs ${CMAKE_CURRENT_SOURCE_DIR}/web FLASH_IN_PROJECT)
+# Build LittleFS image from web/dist/ and flash it together with the app.
+#
+# web/dist/ contains the pre-built SPA (committed to the repo as a single-file
+# standalone HTML; replaced by the optimised Vite build after `npm run build`).
+#
+# Source SPA is in web/src/ (Vite + uPlot).  Build flow:
+#   cd web && npm install && npm run build   → writes web/dist/
+#   idf.py build                             → packages web/dist/ into LittleFS
+#
+# The dist/index.html pre-built standalone works immediately without npm build.
+littlefs_create_partition_image(littlefs ${CMAKE_CURRENT_SOURCE_DIR}/web/dist FLASH_IN_PROJECT)

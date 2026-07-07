@@ -32,7 +32,7 @@ __pycache__/
 *.egg-info/
 .venv/
 venv/
-dist/
+/dist/           # top-level dist only (web/dist/ is intentionally committed)
 
 # Security: NEVER commit secrets or credentials
 *.env

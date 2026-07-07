@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<!--
+  web/dist/index.html — Pre-built Aqua-HMET SPA (P6, standalone).
+
+  This file works IMMEDIATELY on the device without any npm build step.
+  It is a self-contained single-file SPA with an HTML5 Canvas voltammogram chart.
+
+  For the optimised Vite build (uPlot chart, gzipped assets):
+    cd web && npm install && npm run build
+  The Vite build overwrites this file with a production version.
+
+  Features implemented here:
+    - WebSocket connection with auto-reconnect
+    - Binary DataPoint frame parsing (mirrors net_comms_protocol.h)
+    - Live voltammogram canvas chart (dI vs E, 3 electrode series)
+    - DPV parameter form with client-side validation (mirrors echem_core)
+    - Start / Abort / CSV export controls
+    - Reference CSV import (Option-B overlay)
+    - x-axis toggle: commanded V vs measured RE
+    - Simple JS peak detection
+    - Dark theme (matches TFT)
+    - Toast notifications
+    - Responsive (phone + laptop)
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aqua-HMET — DPV Potentiostat</title>
+<style>
+:root{--bg:#080f1a;--sur:#0d1829;--sur2:#162033;--brd:#1e3048;--acc:#38bdf8;--acc2:#0284c7;--grn:#34d399;--amb:#fbbf24;--red:#f87171;--vio:#a78bfa;--txt:#e2eaf3;--dim:#7491a8;--r:8px;--r2:4px;--mono:'IBM Plex Mono','JetBrains Mono',monospace}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg);color:var(--txt);font-family:'Segoe UI',system-ui,sans-serif;font-size:14px;line-height:1.5}
+#app{display:flex;flex-direction:column;height:100vh;max-width:1400px;margin:0 auto;padding:0 12px}
+#topbar{display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--brd);flex-shrink:0}
+#topbar h1{font-size:.85rem;font-weight:700;color:var(--acc);letter-spacing:.1em;text-transform:uppercase}
+#wss{display:flex;align-items:center;gap:6px;font-size:.8rem;color:var(--dim);margin-left:auto}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--brd);flex-shrink:0}
+.dot.on{background:var(--grn)}.dot.run{background:var(--amb);animation:pulse 1s ease-in-out infinite}.dot.err{background:var(--red)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+#main{flex:1;display:grid;grid-template-columns:260px 1fr;gap:12px;padding:12px 0;overflow:hidden;min-height:0}
+#left{display:flex;flex-direction:column;gap:10px;overflow-y:auto}
+#right{display:flex;flex-direction:column;gap:10px;min-width:0;overflow:hidden}
+.card{background:var(--sur);border:1px solid var(--brd);border-radius:var(--r);padding:12px}
+.ct{font-size:.75rem;font-weight:600;color:var(--acc);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px;border-bottom:1px solid var(--brd);padding-bottom:6px}
+.f{display:flex;flex-direction:column;gap:3px;margin-bottom:8px}
+.f label{font-size:.75rem;color:var(--dim)}
+.f input,.f select{background:var(--sur2);border:1px solid var(--brd);border-radius:var(--r2);color:var(--txt);font-size:.85rem;padding:5px 8px;width:100%;outline:none}
+.f input:focus,.f select:focus{border-color:var(--acc)}
+.ferr{font-size:.7rem;color:var(--red);display:none}
+.finv input{border-color:var(--red)}.finv .ferr{display:block}
+.btn{border:1px solid var(--brd);border-radius:var(--r2);background:transparent;color:var(--txt);font-size:.85rem;padding:6px 12px;cursor:pointer;transition:background .15s,border-color .15s;white-space:nowrap}
+.btn:hover{background:var(--sur2)}.btn:disabled{opacity:.4;cursor:not-allowed}
+.btnp{background:var(--acc2);border-color:var(--acc);color:#fff;font-weight:600}.btnp:hover{background:var(--acc)}
+.btnd{border-color:var(--red);color:var(--red)}.btnd:hover{background:rgba(248,81,73,.1)}
+.brow{display:flex;gap:8px;flex-wrap:wrap}
+#cw{flex:1;min-height:0;position:relative}
+canvas#cv{display:block;width:100%;height:100%;min-height:260px}
+#rdout{display:flex;gap:20px;flex-wrap:wrap;font-size:.78rem;color:var(--dim);align-items:baseline;padding:6px 0;border-top:1px solid var(--brd);border-bottom:1px solid var(--brd);margin-bottom:10px}
+.rdl{font-size:.72rem;color:var(--dim);text-transform:uppercase;letter-spacing:.06em}
+#rdout span{font-family:var(--mono);font-size:1.3rem;font-weight:500;color:var(--acc);letter-spacing:-.02em;min-width:5ch;display:inline-block}
+.rdu{font-size:.72rem;color:var(--dim);margin-left:2px}
+body:not([data-state='running']):not([data-state='equilibrating']) #rdout span{color:var(--dim);font-size:1rem}
+.pi{display:flex;align-items:center;gap:12px;background:var(--sur2);border:1px solid var(--brd);border-radius:var(--r2);padding:8px 12px;font-size:.85rem;margin-bottom:6px}
+.pe{color:var(--acc);font-weight:600;min-width:80px}.pI{color:var(--txt);font-weight:600;min-width:80px}
+.trow{display:flex;gap:6px;align-items:center;font-size:.8rem;color:var(--dim)}
+.trow .btn.act{border-color:var(--acc);color:var(--acc)}
+#toast{position:fixed;top:-80px;left:50%;transform:translateX(-50%);background:var(--red);color:#fff;padding:10px 20px;border-radius:var(--r);font-size:.9rem;font-weight:500;box-shadow:0 4px 16px rgba(0,0,0,.5);transition:top .3s ease;z-index:100;max-width:90vw;text-align:center}
+#toast.vis{top:16px}#toast.inf{background:var(--acc2)}
+.adv-summary{font-size:.75rem;color:var(--dim);cursor:pointer;margin-bottom:8px;user-select:none;list-style:none;display:flex;align-items:center;gap:4px}.adv-summary::-webkit-details-marker{display:none}.adv-summary:hover{color:var(--txt)}.adv-arr{transition:transform .15s;display:inline-block}details[open] .adv-arr{transform:rotate(90deg)}
+#scan-est{font-size:.75rem;color:var(--dim);margin-top:4px;font-family:var(--mono)}#scan-est span{color:var(--txt)}
+body[data-state='running'] #cw{box-shadow:0 0 0 1px var(--amb),0 0 12px rgba(251,191,36,.08);border-radius:var(--r)}
+body[data-state='equilibrating'] #cw{box-shadow:0 0 0 1px var(--acc),0 0 12px rgba(56,189,248,.08);border-radius:var(--r)}
+body[data-state='complete'] #cw{box-shadow:0 0 0 1px var(--grn),0 0 12px rgba(52,211,153,.08);border-radius:var(--r)}
+body[data-state='error'] #cw{box-shadow:0 0 0 1px var(--red),0 0 12px rgba(248,113,113,.08);border-radius:var(--r)}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="topbar">
+    <h1><span aria-hidden="true">⚗</span> Aqua-HMET</h1>
+    <div id="wss">
+      <div class="dot" id="dot"></div>
+      <span id="wsl">Connecting…</span>
+      <span id="ptsw" style="margin-left:8px;display:none"><span id="ptv">0</span> pts</span>
+    </div>
+  </div>
+
+  <div id="main">
+    <div id="left">
+      <div class="card">
+        <div class="ct">DPV Parameters</div>
+        <div class="f" id="fe1"><label>E begin (mV)</label><input type="number" id="eb" value="-500" step="10"><div class="ferr">±1000 mV</div></div>
+        <div class="f" id="fe2"><label>E end (mV)</label><input type="number" id="ee" value="500" step="10"><div class="ferr">±1000 mV</div></div>
+        <div class="f" id="fe3"><label>E step (mV)</label><input type="number" id="es" value="5" step="1" min="1"><div class="ferr">&gt;0</div></div>
+        <div class="f" id="fe4"><label>E pulse (mV)</label><input type="number" id="ep" value="25" step="5" min="1"><div class="ferr">&gt;0</div></div>
+        <div class="f"><label>t pulse (ms)</label><input type="number" id="tp" value="50" step="10" min="1"></div>
+        <details>
+          <summary class="adv-summary"><span class="adv-arr">▶</span> Advanced timing</summary>
+          <div class="f" id="fe5"><label>t period (ms)</label><input type="number" id="tpr" value="200" step="10" min="2"><div class="ferr">Must &gt; t pulse</div></div>
+          <div class="f"><label>Equilibration (ms)</label><input type="number" id="teq" value="2000" step="500" min="0"></div>
+        </details>
+        <div id="scan-est" style="margin-bottom:6px">Est: <span id="sest">—</span></div>
+        <div class="f"><label>Electrode</label>
+          <select id="elec">
+            <option value="1">Electrode 1</option>
+            <option value="2">Electrode 2</option>
+            <option value="3">Electrode 3</option>
+            <option value="0">All (sequential)</option>
+          </select>
+        </div>
+        <div class="brow" style="margin-top:10px">
+          <button class="btn btnp" id="bst" data-testid="btn-start" disabled>▶ Start DPV</button>
+          <button class="btn btnd" id="bab" data-testid="btn-abort" disabled>■ Abort</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="ct">Overlay Reference Scan</div>
+        <p style="font-size:.75rem;color:var(--dim);margin-bottom:8px">Import a CSV from another instrument to compare traces on the same axes.</p>
+        <div class="brow">
+          <label class="btn" style="cursor:pointer">⬆ Import CSV<input type="file" accept=".csv,.txt" id="rff" style="display:none"></label>
+          <button class="btn" id="bclr" disabled>✕ Clear</button>
+        </div>
+        <div id="rfi" style="font-size:.75rem;color:var(--dim);margin-top:6px"></div>
+      </div>
+    </div>
+
+    <div id="right">
+      <div class="card" style="flex:1;min-height:0;display:flex;flex-direction:column">
+        <div class="ct" style="margin-bottom:6px">
+          Voltammogram (ΔI vs E)
+          <span style="float:right">
+            <span class="trow">
+              <button class="btn act" id="xc" style="padding:2px 8px;font-size:.75rem" data-testid="xaxis-cmd">Commanded V</button>
+              <button class="btn"     id="xr" style="padding:2px 8px;font-size:.75rem" data-testid="xaxis-re">Measured RE</button>
+            </span>
+          </span>
+        </div>
+        <div id="rdout" style="margin-bottom:8px">
+          <div><span class="rdl">E</span> <span id="lE">—</span> <span class="rdu">mV</span></div>
+          <div><span class="rdl">ΔI</span> <span id="lI">—</span> <span class="rdu">µA</span></div>
+          <div><span class="rdl">Electrode</span> <span id="lEl">—</span></div>
+        </div>
+        <div id="cw"><canvas id="cv" data-testid="chart-canvas"></canvas></div>
+        <div id="refleg" style="display:none;margin-top:6px;display:flex;align-items:center;gap:6px;font-size:.75rem;color:var(--dim)">
+          <div style="width:24px;height:2px;background:var(--amb);border-radius:1px"></div> Reference
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="ct">
+          Peaks
+          <span style="float:right">
+            <button class="btn" id="bcsv" data-testid="btn-csv" disabled style="padding:3px 10px;font-size:.75rem">⬇ Export CSV</button>
+          </span>
+        </div>
+        <div id="pks"><div style="color:var(--dim);font-size:.8rem" id="pke">No peaks detected — run a DPV scan.</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+(function(){
+'use strict';
+
+// ── Wire protocol (mirrors net_comms_protocol.h) ─────────────────────────────
+const DP_TYPE = 0x01, DP_SIZE = 16;
+function parseDP(buf){
+  const dv = new DataView(buf);
+  if(dv.byteLength!==DP_SIZE||dv.getUint8(0)!==DP_TYPE)return null;
+  return{electrode:dv.getUint8(1),idx:dv.getUint16(2,true),E_mV:dv.getFloat32(4,true),I_uA:dv.getFloat32(8,true),RE_mV:dv.getFloat32(12,true)};
+}
+function encDP(d){
+  const buf=new ArrayBuffer(DP_SIZE),dv=new DataView(buf);
+  dv.setUint8(0,DP_TYPE);dv.setUint8(1,d.electrode);dv.setUint16(2,d.idx,true);
+  dv.setFloat32(4,d.E_mV,true);dv.setFloat32(8,d.I_uA,true);dv.setFloat32(12,d.RE_mV,true);
+  return buf;
+}
+
+// ── State ────────────────────────────────────────────────────────────────────
+const COLORS={1:'#38bdf8',2:'#f9826c',3:'#a78bfa',0:'#fbbf24',ref:'#fbbf24'};
+let ws=null,wsTimer=null,xMode='cmd';
+let pts=[],refPts=[],hasRef=false;
+let pendQ=[],rafPending=false;
+let scanSeries={};   // {elec: {xs,ys}}
+let refSeries={xs:[],ys:[]};
+
+// ── DOM refs ─────────────────────────────────────────────────────────────────
+const $=id=>document.getElementById(id);
+const dot=$('dot'),wsl=$('wsl'),ptsw=$('ptsw'),ptv=$('ptv');
+const bst=$('bst'),bab=$('bab'),bcsv=$('bcsv');
+const lE=$('lE'),lI=$('lI'),lEl=$('lEl');
+const pks=$('pks'),pke=$('pke');
+const toast=$('toast');
+const cv=$('cv');
+
+// ── Canvas chart ─────────────────────────────────────────────────────────────
+let ctx=cv.getContext('2d');
+const PAD={t:10,r:10,b:40,l:55};
+
+function sizeCanvas(){
+  const rect=cv.parentElement.getBoundingClientRect();
+  cv.width=rect.width||600;cv.height=rect.height||300;
+}
+
+function chartDomain(){
+  let xmin=Infinity,xmax=-Infinity,ymin=Infinity,ymax=-Infinity;
+  const allSeries=Object.values(scanSeries).concat(hasRef?[refSeries]:[]);
+  for(const s of allSeries){
+    for(let i=0;i<s.xs.length;i++){
+      xmin=Math.min(xmin,s.xs[i]);xmax=Math.max(xmax,s.xs[i]);
+      ymin=Math.min(ymin,s.ys[i]);ymax=Math.max(ymax,s.ys[i]);
+    }
+  }
+  if(!isFinite(xmin)){xmin=-500;xmax=500;ymin=-5;ymax=30;}
+  const xpad=(xmax-xmin)*0.03||10,ypad=(ymax-ymin)*0.1||1;
+  return{xmin:xmin-xpad,xmax:xmax+xpad,ymin:ymin-ypad,ymax:ymax+ypad};
+}
+
+function toScreen(d,x,y){
+  const W=cv.width-PAD.l-PAD.r,H=cv.height-PAD.t-PAD.b;
+  return{
+    sx: PAD.l+W*(x-d.xmin)/(d.xmax-d.xmin),
+    sy: PAD.t+H*(1-(y-d.ymin)/(d.ymax-d.ymin))
+  };
+}
+
+function niceStep(range,ticks){
+  const raw=range/ticks;
+  const mag=Math.pow(10,Math.floor(Math.log10(raw)));
+  const norm=raw/mag;
+  const step=norm<1.5?1:norm<3.5?2:norm<7.5?5:10;
+  return step*mag;
+}
+
+function drawChart(){
+  if(!ctx)return;
+  const W=cv.width,H=cv.height;
+  ctx.clearRect(0,0,W,H);
+
+  const d=chartDomain();
+  const IW=W-PAD.l-PAD.r,IH=H-PAD.t-PAD.b;
+
+  // Grid
+  ctx.strokeStyle='#21262d';ctx.lineWidth=1;
+  const xs=niceStep(d.xmax-d.xmin,6);
+  for(let x=Math.ceil(d.xmin/xs)*xs;x<=d.xmax;x+=xs){
+    const {sx}=toScreen(d,x,0);
+    ctx.beginPath();ctx.moveTo(sx,PAD.t);ctx.lineTo(sx,PAD.t+IH);ctx.stroke();
+    ctx.fillStyle='#8b949e';ctx.font='10px Segoe UI,sans-serif';
+    ctx.textAlign='center';ctx.fillText(x.toFixed(0),sx,H-PAD.b+14);
+  }
+  const ys=niceStep(d.ymax-d.ymin,5);
+  for(let y=Math.ceil(d.ymin/ys)*ys;y<=d.ymax;y+=ys){
+    const {sy}=toScreen(d,0,y);
+    ctx.beginPath();ctx.moveTo(PAD.l,sy);ctx.lineTo(PAD.l+IW,sy);ctx.stroke();
+    ctx.fillStyle='#8b949e';ctx.textAlign='right';ctx.fillText(y.toFixed(1),PAD.l-4,sy+3);
+  }
+
+  // Axes
+  ctx.strokeStyle='#30363d';ctx.lineWidth=1;
+  ctx.strokeRect(PAD.l,PAD.t,IW,IH);
+
+  // Axis labels
+  ctx.fillStyle='#8b949e';ctx.font='11px Segoe UI,sans-serif';ctx.textAlign='center';
+  ctx.fillText(xMode==='re'?'RE (mV)':'E (mV)',PAD.l+IW/2,H-4);
+  ctx.save();ctx.translate(12,PAD.t+IH/2);ctx.rotate(-Math.PI/2);
+  ctx.fillText('ΔI (µA)',0,0);ctx.restore();
+
+  // Series
+  ctx.lineWidth=2;
+  for(const[elec,s]of Object.entries(scanSeries)){
+    if(!s.xs.length)continue;
+    ctx.strokeStyle=COLORS[elec]||'#8b949e';
+    ctx.beginPath();
+    for(let i=0;i<s.xs.length;i++){
+      const {sx,sy}=toScreen(d,s.xs[i],s.ys[i]);
+      i===0?ctx.moveTo(sx,sy):ctx.lineTo(sx,sy);
+    }
+    ctx.stroke();
+  }
+
+  // Reference overlay
+  if(hasRef&&refSeries.xs.length){
+    ctx.strokeStyle=COLORS.ref;ctx.lineWidth=1.5;
+    ctx.setLineDash([4,4]);ctx.beginPath();
+    for(let i=0;i<refSeries.xs.length;i++){
+      const {sx,sy}=toScreen(d,refSeries.xs[i],refSeries.ys[i]);
+      i===0?ctx.moveTo(sx,sy):ctx.lineTo(sx,sy);
+    }
+    ctx.stroke();ctx.setLineDash([]);
+  }
+}
+
+new ResizeObserver(()=>{sizeCanvas();drawChart();}).observe($('cw'));
+sizeCanvas();
+
+// ── rAF batch ────────────────────────────────────────────────────────────────
+function schedFlush(){if(!rafPending){rafPending=true;requestAnimationFrame(flush);}}
+function flush(){
+  rafPending=false;
+  if(!pendQ.length)return;
+  for(const pt of pendQ){
+    const x=xMode==='re'?pt.RE_mV:pt.E_mV;
+    if(!scanSeries[pt.electrode])scanSeries[pt.electrode]={xs:[],ys:[]};
+    scanSeries[pt.electrode].xs.push(x);
+    scanSeries[pt.electrode].ys.push(pt.I_uA);
+  }
+  const last=pendQ[pendQ.length-1];
+  lE.textContent=(xMode==='re'?last.RE_mV:last.E_mV).toFixed(1);
+  lI.textContent=last.I_uA.toFixed(2);
+  lEl.textContent=last.electrode;
+  const total=Object.values(scanSeries).reduce((s,ss)=>s+ss.xs.length,0);
+  ptv.textContent=total;
+  pendQ=[];
+  drawChart();
+}
+
+// ── WS connection ─────────────────────────────────────────────────────────────
+function connect(){
+  if(ws)return;
+  const url=(location.protocol==='https:'?'wss':'ws')+'://'+location.host+'/ws';
+  ws=new WebSocket(url);ws.binaryType='arraybuffer';
+
+  ws.onopen=()=>{
+    dot.className='dot on';wsl.textContent='Connected';
+    bst.disabled=false;clearTimeout(wsTimer);wsTimer=null;
+    document.body.dataset.state='idle';
+  };
+  ws.onclose=()=>{
+    ws=null;dot.className='dot';wsl.textContent='Disconnected — retrying…';
+    bst.disabled=true;bab.disabled=true;
+    wsTimer=setTimeout(connect,3000);
+  };
+  ws.onerror=()=>{};
+  ws.onmessage=ev=>{
+    if(ev.data instanceof ArrayBuffer){
+      const pt=parseDP(ev.data);
+      if(!pt)return;
+      pts.push(pt);pendQ.push(pt);schedFlush();
+    }else{
+      let m;try{m=JSON.parse(ev.data);}catch{return;}
+      if(m.t==='hello'){$('fw').textContent=`fw ${m.fw||'?'} / proto ${m.proto||'?'}`;}
+      else if(m.t==='event')handleEvent(m);
+      else if(m.t==='resync_complete')handleResync();
+    }
+  };
+}
+
+function send(o){if(ws&&ws.readyState===1)ws.send(JSON.stringify(o));}
+
+// ── Event handlers ────────────────────────────────────────────────────────────
+function handleEvent(m){
+  const n=m.name||'';
+  if(n==='scan_started'){
+    pts=[];scanSeries={};pendQ=[];
+    lE.textContent=lI.textContent=lEl.textContent='—';ptv.textContent='0';
+    pke.textContent='Running…';while(pks.children.length>1)pks.removeChild(pks.lastChild);
+    dot.className='dot run';wsl.textContent='Running scan…';
+    bst.disabled=true;bab.disabled=false;ptsw.style.display='';
+    bcsv.disabled=true;document.body.dataset.state='running';drawChart();
+  }else if(n==='equilibrating'){
+    dot.className='dot run';wsl.textContent='Equilibrating…';document.body.dataset.state='equilibrating';
+  }else if(n==='scan_complete'){
+    dot.className='dot on';wsl.textContent='Scan complete';
+    bst.disabled=false;bab.disabled=true;bcsv.disabled=pts.length===0;
+    document.body.dataset.state='complete';
+    runPeaks();showToast('Scan complete','inf');
+  }else if(n==='scan_aborted'){
+    dot.className='dot on';wsl.textContent='Ready';bst.disabled=false;bab.disabled=true;
+    document.body.dataset.state='idle';
+    showToast('Scan aborted','inf');
+  }else if(n==='scan_error'){
+    dot.className='dot err';wsl.textContent='Scan error';bst.disabled=false;bab.disabled=true;
+    document.body.dataset.state='error';
+    showToast(m.msg||'Scan error');
+  }
+}
+
+function handleResync(){
+  scanSeries={};
+  for(const pt of pts){
+    const x=xMode==='re'?pt.RE_mV:pt.E_mV;
+    if(!scanSeries[pt.electrode])scanSeries[pt.electrode]={xs:[],ys:[]};
+    scanSeries[pt.electrode].xs.push(x);
+    scanSeries[pt.electrode].ys.push(pt.I_uA);
+  }
+  ptv.textContent=pts.length;
+  if(pts.length){ptsw.style.display='';bcsv.disabled=false;}
+  drawChart();
+}
+
+// ── Form & controls ───────────────────────────────────────────────────────────
+function readParams(){
+  return{
+    e_begin_mV:parseFloat($('eb').value),e_end_mV:parseFloat($('ee').value),
+    e_step_mV:parseFloat($('es').value),e_pulse_mV:parseFloat($('ep').value),
+    t_pulse_ms:parseInt($('tp').value),t_period_ms:parseInt($('tpr').value),
+    t_equilibration_ms:parseInt($('teq').value),
+    electrode:parseInt($('elec').value),cycles:1,n_avg:5
+  };
+}
+
+function validateForm(){
+  const p=readParams();
+  let ok=true;
+  function chk(id,bad){const el=$(id);el.classList.toggle('finv',bad);if(bad)ok=false;}
+  chk('fe1',p.e_begin_mV<-1000||p.e_begin_mV>1000);
+  chk('fe2',p.e_end_mV<-1000||p.e_end_mV>1000);
+  chk('fe3',p.e_step_mV<=0);chk('fe4',p.e_pulse_mV<=0);
+  chk('fe5',p.t_period_ms<=p.t_pulse_ms);
+  return ok?p:null;
+}
+
+bst.addEventListener('click',()=>{
+  const p=validateForm();if(!p){showToast('Fix parameter errors');return;}
+  send({cmd:'start',technique:'DPV',electrode:p.electrode,params:{
+    e_begin_mV:p.e_begin_mV,e_end_mV:p.e_end_mV,e_step_mV:p.e_step_mV,
+    e_pulse_mV:p.e_pulse_mV,t_pulse_ms:p.t_pulse_ms,t_period_ms:p.t_period_ms,
+    t_equilibration_ms:p.t_equilibration_ms
+  }});
+});
+
+bab.addEventListener('click',()=>send({cmd:'abort'}));
+
+// ── CSV export ────────────────────────────────────────────────────────────────
+bcsv.addEventListener('click',()=>{
+  if(!pts.length)return;
+  let csv='electrode,idx,E_mV,I_uA,RE_mV\r\n';
+  for(const p of pts)csv+=`${p.electrode},${p.idx},${p.E_mV.toFixed(4)},${p.I_uA.toFixed(4)},${p.RE_mV.toFixed(4)}\r\n`;
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  a.download='aquahmet_scan.csv';a.click();
+});
+
+// ── Reference CSV ─────────────────────────────────────────────────────────────
+$('rff').addEventListener('change',ev=>{
+  const f=ev.target.files[0];if(!f)return;
+  const r=new FileReader();
+  r.onload=e=>{
+    const lines=e.target.result.replace(/\r\n/g,'\n').split('\n');
+    refSeries={xs:[],ys:[]};let idx=0;
+    for(const raw of lines){
+      const l=raw.trim();if(!l)continue;
+      const c=l.split(',');if(isNaN(parseFloat(c[0])))continue;
+      const E=parseFloat(c.length>=5?c[2]:c[0]),I=parseFloat(c.length>=5?c[3]:c[1]);
+      refSeries.xs.push(xMode==='re'?E:E);refSeries.ys.push(I);idx++;
+    }
+    hasRef=refSeries.xs.length>0;
+    $('rfi').textContent=hasRef?`${refSeries.xs.length} pts loaded`:'No data found';
+    $('refleg').style.display=hasRef?'flex':'none';
+    $('bclr').disabled=!hasRef;
+    drawChart();
+    fetch('/api/reference.csv',{method:'POST',body:f}).catch(()=>{});
+  };
+  r.readAsText(f);ev.target.value='';
+});
+$('bclr').addEventListener('click',()=>{
+  hasRef=false;refSeries={xs:[],ys:[]};
+  $('rfi').textContent='';$('refleg').style.display='none';$('bclr').disabled=true;
+  drawChart();
+});
+
+// ── x-axis toggle ─────────────────────────────────────────────────────────────
+function setX(m){
+  xMode=m;$('xc').classList.toggle('act',m==='cmd');$('xr').classList.toggle('act',m==='re');
+  scanSeries={};
+  for(const pt of pts){
+    const x=m==='re'?pt.RE_mV:pt.E_mV;
+    if(!scanSeries[pt.electrode])scanSeries[pt.electrode]={xs:[],ys:[]};
+    scanSeries[pt.electrode].xs.push(x);scanSeries[pt.electrode].ys.push(pt.I_uA);
+  }
+  if(hasRef)refSeries.xs=refSeries.xs.map((_,i)=>refPts[i]?refPts[i].E_mV:refSeries.xs[i]);
+  drawChart();
+}
+$('xc').addEventListener('click',()=>setX('cmd'));
+$('xr').addEventListener('click',()=>setX('re'));
+
+// ── Peak detection ────────────────────────────────────────────────────────────
+function runPeaks(){
+  const xs=pts.map(p=>xMode==='re'?p.RE_mV:p.E_mV);
+  const ys=pts.map(p=>p.I_uA);
+  const n=ys.length;if(n<3){pke.textContent='Too few points.';return;}
+  const cands=[];
+  for(let i=1;i<n-1;i++){
+    if(ys[i]>ys[i-1]&&ys[i]>ys[i+1]&&ys[i]>=0){
+      const lMin=Math.min(...ys.slice(0,i));
+      const rMin=Math.min(...ys.slice(i+1));
+      const prom=ys[i]-Math.max(lMin,rMin);
+      if(prom>=3)cands.push({idx:i,E:xs[i],I:ys[i],prom});
+    }
+  }
+  cands.sort((a,b)=>b.I-a.I);
+  const kept=[];
+  for(const c of cands){if(!kept.some(k=>Math.abs(k.E-c.E)<50))kept.push(c);}
+  kept.sort((a,b)=>a.E-b.E);
+  while(pks.children.length>1)pks.removeChild(pks.lastChild);
+  if(!kept.length){pke.textContent='No peaks detected.';return;}
+  pke.textContent='';
+  for(const p of kept){
+    const d=document.createElement('div');d.className='pi';
+    d.setAttribute('data-testid','peak-item');
+    d.innerHTML=`<span class="pe">E = ${p.E.toFixed(1)} mV</span><span class="pI">ΔI = ${p.I.toFixed(2)} µA</span>`;
+    pks.appendChild(d);
+  }
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+let tTimer=null;
+function showToast(msg,type='err'){
+  toast.textContent=msg;toast.className=type==='inf'?'vis inf':'vis';
+  clearTimeout(tTimer);tTimer=setTimeout(()=>toast.className='',3500);
+}
+// ── Scan estimate ───────────────────────────────────────────────────────────
+  const sestEl=$('sest');
+  function updEst(){
+    const steps=Math.abs(parseFloat($('ee').value)-parseFloat($('eb').value))/parseFloat($('es').value);
+    const ms=Math.ceil(steps)*parseInt($('tpr').value)+parseInt($('teq').value);
+    if(sestEl)sestEl.textContent=isFinite(ms)?(ms<60000?`~${(ms/1000).toFixed(0)} s`:`~${(ms/60000).toFixed(1)} min`):'?';
+  }
+  document.querySelector('.card')?.addEventListener('input',updEst);
+  updEst();
+// ── Boot ──────────────────────────────────────────────────────────────────────
+connect();
+
+// fw/proto label placeholder
+document.querySelector('#left').insertAdjacentHTML('beforeend',
+  '<div class="card"><div class="ct">Connection</div>'+
+  '<div style="font-size:.75rem;color:var(--dim)">'+location.host+'</div>'+
+  '<div style="font-size:.75rem;color:var(--dim);margin-top:4px" id="fw">—</div></div>');
+})();
+</script>
+</body>
+</html>

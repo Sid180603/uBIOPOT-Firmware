@@ -96,8 +96,8 @@ testWithServer('A2: dark background applied', async ({ page, server }) => {
   const bg = await page.evaluate(() =>
     window.getComputedStyle(document.body).backgroundColor
   );
-  // #0d1117 = rgb(13, 17, 23)
-  expect(bg).toBe('rgb(13, 17, 23)');
+  // --bg: #080f1a = rgb(8, 15, 26)
+  expect(bg).toBe('rgb(8, 15, 26)');
 });
 
 testWithServer('A3: Start DPV button visible', async ({ page, server }) => {
@@ -156,13 +156,13 @@ testWithServer('C1: invalid e_begin shows validation error', async ({ page, serv
   await page.waitForTimeout(500);
 
   // Set e_begin to out-of-range value
-  await page.locator('#eb, #e-begin').first().fill('9999');
+  await page.locator('#e-begin').fill('9999');
   await page.getByTestId('btn-start').click();
 
-  // Toast or invalid class should appear
+  // .invalid field or visible toast
   const hasError = await page.evaluate(() =>
-    document.querySelector('.finv, .invalid') !== null ||
-    document.querySelector('#toast')?.classList.contains('vis')
+    document.querySelector('.invalid') !== null ||
+    document.querySelector('#toast')?.classList.contains('visible')
   );
   expect(hasError).toBe(true);
 });
@@ -171,13 +171,16 @@ testWithServer('C2: t_period < t_pulse shows validation error', async ({ page, s
   await page.goto(server.url);
   await page.waitForTimeout(500);
 
-  await page.locator('#tp, #t-pulse').first().fill('100');
-  await page.locator('#tpr, #t-period').first().fill('50');
+  // #t-period is inside <details> — open it first
+  await page.locator('details').evaluate(el => el.setAttribute('open', ''));
+  await page.locator('#t-pulse').first().fill('100');
+  await page.locator('#t-period').first().fill('50');
   await page.getByTestId('btn-start').click();
 
   const hasError = await page.evaluate(() =>
-    document.querySelector('.finv, .invalid') !== null ||
-    document.querySelector('#toast')?.classList.contains('vis')
+    document.querySelector('.invalid') !== null ||
+    document.querySelector('#toast')?.classList.contains('vis') ||   // dist SPA
+    document.querySelector('#toast')?.classList.contains('visible')  // Vite SPA
   );
   expect(hasError).toBe(true);
 });
@@ -231,7 +234,7 @@ testWithServer('D2: binary DataPoint frames update pts counter', async ({ page, 
   // Wait for pts counter to reflect received points
   await page.waitForFunction(
     (expected) => {
-      const el = document.querySelector('#ptv, #pts-val');
+      const el = document.querySelector('#pts-val');
       return el && parseInt(el.textContent) >= expected;
     },
     frames.length,
@@ -372,22 +375,21 @@ testWithServer('F1: abort command sent, scan_aborted enables Start', async ({ pa
 testWithServer('G1: x-axis Commanded V button starts as active', async ({ page, server }) => {
   await page.goto(server.url);
   await page.waitForTimeout(300);
-  const btn = page.locator('[data-testid="xaxis-cmd"], #xc');
-  await expect(btn.first()).toHaveClass(/act|active/);
+  const btn = page.locator('#xaxis-cmd');
+  await expect(btn).toHaveClass(/active/);
 });
 
 testWithServer('G2: click RE button toggles active state', async ({ page, server }) => {
   await page.goto(server.url);
   await page.waitForTimeout(300);
 
-  const reBtn  = page.locator('[data-testid="xaxis-re"], #xr').first();
-  const cmdBtn = page.locator('[data-testid="xaxis-cmd"], #xc').first();
+  const reBtn  = page.locator('#xaxis-re');
+  const cmdBtn = page.locator('#xaxis-cmd');
   await reBtn.click();
 
-  await expect(reBtn).toHaveClass(/act|active/);
-  // cmd button should no longer be active
+  await expect(reBtn).toHaveClass(/active/);
   const cmdClass = await cmdBtn.getAttribute('class');
-  expect(cmdClass).not.toMatch(/\bact\b/);
+  expect(cmdClass).not.toMatch(/\bactive\b/);
 });
 
 // ── H. Reconnect / resync ─────────────────────────────────────────────────────
@@ -422,7 +424,7 @@ testWithServer('H2: late-joining client pts rebuilt from resync', async ({ page,
 
   await page.waitForFunction(
     (expected) => {
-      const el = document.querySelector('#ptv, #pts-val');
+      const el = document.querySelector('#pts-val');
       return el && parseInt(el.textContent) >= expected;
     },
     frames.length,
@@ -438,7 +440,7 @@ testWithServer('I1: reference CSV can be uploaded', async ({ page, server }) => 
 
   // Generate a simple 3-row reference CSV
   const csvContent = 'E_mV,I_uA\n-500,2.0\n0,5.0\n500,1.0\n';
-  const refInput   = page.locator('#rff, #ref-file').first();
+  const refInput   = page.locator('#ref-file');
 
   await refInput.setInputFiles({
     name:     'reference.csv',
@@ -448,7 +450,7 @@ testWithServer('I1: reference CSV can be uploaded', async ({ page, server }) => 
 
   // Info text should show points loaded
   await page.waitForFunction(() => {
-    const el = document.querySelector('#rfi, #ref-info');
+    const el = document.querySelector('#ref-info');
     return el && el.textContent.match(/pts loaded|points loaded/i);
   }, null, { timeout: 4000 });
 });

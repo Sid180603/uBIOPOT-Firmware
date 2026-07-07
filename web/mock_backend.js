@@ -279,6 +279,13 @@ async function start({ port = 3000, distDir = path.join(__dirname, 'dist') } = {
     serveFile(distDir, req.url, res);
   });
 
+  // Track raw TCP sockets so close() can destroy keep-alive connections instantly
+  const sockets = new Set();
+  server.on('connection', s => {
+    sockets.add(s);
+    s.on('close', () => sockets.delete(s));
+  });
+
   const wss = new WebSocketServer({ server, path: '/ws' });
   wss.on('connection', (ws) => mock.handleClient(ws));
 
@@ -293,7 +300,13 @@ async function start({ port = 3000, distDir = path.join(__dirname, 'dist') } = {
     port:  actualPort,
     url:   `http://127.0.0.1:${actualPort}`,
     wsUrl: `ws://127.0.0.1:${actualPort}/ws`,
-    close: () => new Promise(r => server.close(r)),
+    close: () => new Promise(r => {
+      // Terminate all open WebSocket connections first
+      for (const ws of mock.clients) ws.terminate();
+      // Destroy all TCP sockets so http.server.close() resolves immediately
+      for (const s of sockets) s.destroy();
+      server.close(r);
+    }),
   };
 }
 

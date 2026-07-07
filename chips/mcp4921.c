@@ -24,6 +24,7 @@
 
 #include "wokwi-api.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <math.h>
 
@@ -51,7 +52,7 @@ void chip_init(void) {
 
     /* Analog output pin */
     chip->vout_pin = pin_init("VOUT", ANALOG);
-    pin_analog_write(chip->vout_pin, 0.0f);
+    pin_dac_write(chip->vout_pin, 0.0f);
     chip->vout_v = 0.0f;
 
     /* CS pin — watch for falling edge to start SPI transaction */
@@ -110,7 +111,7 @@ static void on_spi_done(void *user_data, uint8_t *buffer, uint32_t count) {
 
     if (!shdn) {
         /* SHDN = 0 → output disabled */
-        pin_analog_write(chip->vout_pin, 0.0f);
+        pin_dac_write(chip->vout_pin, 0.0f);
         chip->vout_v = 0.0f;
         return;
     }
@@ -124,7 +125,7 @@ static void on_spi_done(void *user_data, uint8_t *buffer, uint32_t count) {
     if (v > VREF_V) v = VREF_V;
     if (v < 0.0f)   v = 0.0f;
 
-    pin_analog_write(chip->vout_pin, v);
+    pin_dac_write(chip->vout_pin, v);
     chip->vout_v = v;
 
     printf("[MCP4921] SPI word=0x%04X  code=%u  VOUT=%.4f V\n", word, code, v);

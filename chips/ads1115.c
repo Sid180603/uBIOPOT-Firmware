@@ -42,6 +42,7 @@
 
 #include "wokwi-api.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <math.h>
 #include <stdint.h>
@@ -107,8 +108,8 @@ typedef struct {
 static int16_t compute_conversion(ads1115_t *chip) {
     uint8_t mux = (chip->config_reg >> 12) & 0x7u;
 
-    /* Read DAC output voltage from AIN0/AIN1 analog pin */
-    float v_dac = pin_analog_read(chip->ain0_pin);
+    /* Read DAC output voltage from AIN0 analog pin (connected to MCP4921 VOUT) */
+    float v_dac = pin_adc_read(chip->ain0_pin);
 
     if (mux == MUX_AIN0) {
         /* Voltage channel: return ADC count proportional to V_dac */

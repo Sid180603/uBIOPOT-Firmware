@@ -11,7 +11,7 @@
 
   <!-- Top status bar -->
   <div id="topbar">
-    <h1>⚗ Aqua-HMET</h1>
+    <h1><span aria-hidden="true">⚗</span><span class="logo-text">Aqua-HMET</span></h1>
     <div id="ws-status">
       <div class="status-dot" id="dot"></div>
       <span id="ws-label">Connecting…</span>
@@ -55,15 +55,28 @@
             <label>t pulse (ms)</label>
             <input type="number" id="t-pulse" value="50" step="10" min="1">
           </div>
-          <div class="field" id="f-t-period">
-            <label>t period (ms)</label>
-            <input type="number" id="t-period" value="200" step="10" min="2">
-            <div class="err">Must exceed t pulse</div>
+
+          <!-- Advanced timing (collapsed by default) -->
+          <details>
+            <summary class="adv-summary">
+              <span class="adv-arrow">▶</span> Advanced timing
+            </summary>
+            <div class="field" id="f-t-period">
+              <label>t period (ms)</label>
+              <input type="number" id="t-period" value="200" step="10" min="2">
+              <div class="err">Must exceed t pulse</div>
+            </div>
+            <div class="field">
+              <label>Equilibration (ms)</label>
+              <input type="number" id="t-equil" value="2000" step="500" min="0">
+            </div>
+          </details>
+
+          <!-- Scan time estimate -->
+          <div id="scan-estimate" style="margin-top:4px">
+            Estimated: <span id="scan-estimate-val">—</span>
           </div>
-          <div class="field">
-            <label>Equilibration (ms)</label>
-            <input type="number" id="t-equil" value="2000" step="500" min="0">
-          </div>
+
           <div class="field">
             <label>Electrode</label>
             <select id="electrode">
@@ -100,9 +113,9 @@
 
       <!-- Reference CSV import (Option-B overlay) -->
       <div class="card">
-        <div class="card-title">Reference Overlay</div>
-        <p style="font-size:0.75rem;color:var(--dim);margin-bottom:8px">
-          Import commercial instrument CSV to overlay for thesis comparison.
+        <div class="ct">Overlay Reference Scan</div>
+        <p style="font-size:.75rem;color:var(--dim);margin-bottom:8px">
+          Import a CSV from another instrument to compare traces on the same axes.
         </p>
         <div class="btn-row">
           <label class="btn" style="cursor:pointer">
@@ -134,11 +147,11 @@
           </span>
         </div>
 
-        <!-- Live readout -->
+        <!-- Live readout: instrument-style monospace -->
         <div id="readout" style="margin-bottom:8px">
-          E: <span id="live-e">—</span> mV &nbsp;
-          ΔI: <span id="live-i">—</span> µA &nbsp;
-          Electrode: <span id="live-elec">—</span>
+          <div><span class="rdlabel">E</span> <span id="live-e">&mdash;</span> <span class="rdunit">mV</span></div>
+          <div><span class="rdlabel">ΔI</span> <span id="live-i">&mdash;</span> <span class="rdunit">µA</span></div>
+          <div><span class="rdlabel">Electrode</span> <span id="live-elec">&mdash;</span></div>
         </div>
 
         <!-- uPlot chart container -->

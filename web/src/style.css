@@ -1,18 +1,20 @@
 :root {
-  --bg:        #0d1117;
-  --surface:   #161b22;
-  --surface2:  #21262d;
-  --border:    #30363d;
-  --accent:    #00b4d8;
-  --accent2:   #0077b6;
-  --teal:      #00b4d8;
-  --green:     #3fb950;
-  --amber:     #d29922;
-  --red:       #f85149;
-  --indigo:    #7986cb;
-  --text:      #e6edf3;
-  --dim:       #8b949e;
+  /* Aqua-HMET palette — deep ocean / electrochemistry, not GitHub grey */
+  --bg:        #080f1a;
+  --surface:   #0d1829;
+  --surface2:  #162033;
+  --border:    #1e3048;
+  --accent:    #38bdf8;
+  --accent2:   #0284c7;
+  --teal:      #38bdf8;
+  --green:     #34d399;
+  --amber:     #fbbf24;
+  --red:       #f87171;
+  --violet:    #a78bfa;
+  --text:      #e2eaf3;
+  --dim:       #7491a8;
   --font:      'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-mono: 'IBM Plex Mono', 'JetBrains Mono', 'Cascadia Mono', monospace;
   --radius:    8px;
   --radius-sm: 4px;
 }
@@ -51,7 +53,14 @@ html, body {
   flex-shrink: 0;
 }
 
-#topbar h1 { font-size: 1rem; color: var(--accent); letter-spacing: 0.05em; }
+#topbar h1 {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+#topbar h1 .logo { font-size: 1rem; margin-right: 4px; }
 
 #ws-status {
   display: flex;
@@ -191,23 +200,58 @@ html, body {
 }
 
 /* uPlot overrides for dark theme */
-.uplot, .uplot * { font-family: var(--font) !important; }
-.uplot .u-wrap { background: var(--surface) !important; }
+.uplot, .uplot * { font-family: var(--font-mono) !important; }
+.uplot .u-wrap { background: transparent !important; }
 .u-axis line, .u-grid line { stroke: var(--border) !important; }
-.u-axis text { fill: var(--dim) !important; }
+.u-axis text { fill: var(--dim) !important; font-size: 11px !important; }
 .u-legend { background: transparent !important; color: var(--dim) !important; }
 .u-legend .u-label { color: var(--dim) !important; }
 
-/* ── Live readout bar ─────────────────────────────────────────────────────── */
+/* Chart card — hero treatment: less chrome, more stage */
+#panel-right > .card:first-child {
+  background: color-mix(in srgb, var(--bg) 70%, var(--surface) 30%);
+  border-color: var(--border);
+}
+
+/* State-based ambient chart glow */
+body[data-state='running']      #chart-wrap { box-shadow: 0 0 0 1px var(--amber),  0 0 12px rgba(251,191,36,.08); border-radius: var(--radius); }
+body[data-state='equilibrating']#chart-wrap { box-shadow: 0 0 0 1px var(--accent), 0 0 12px rgba(56,189,248,.08); border-radius: var(--radius); }
+body[data-state='complete']     #chart-wrap { box-shadow: 0 0 0 1px var(--green),  0 0 12px rgba(52,211,153,.08); border-radius: var(--radius); }
+body[data-state='error']        #chart-wrap { box-shadow: 0 0 0 1px var(--red),    0 0 12px rgba(248,113,113,.08); border-radius: var(--radius); }
+body[data-state='idle']         #chart-wrap { box-shadow: none; }
+
+/* ── Live readout bar — instrument-style monospace numerics ──────────────── */
 
 #readout {
   display: flex;
-  gap: 16px;
+  gap: 20px;
   flex-wrap: wrap;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   color: var(--dim);
+  font-family: var(--font);
+  align-items: baseline;
+  padding: 6px 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 10px;
 }
-#readout span { color: var(--text); font-weight: 500; }
+#readout .rdlabel { font-size: 0.72rem; color: var(--dim); text-transform: uppercase; letter-spacing: 0.06em; }
+#readout span {
+  font-family: var(--font-mono);
+  font-size: 1.3rem;
+  font-weight: 500;
+  color: var(--accent);
+  letter-spacing: -0.02em;
+  min-width: 5ch;
+  display: inline-block;
+}
+#readout .rdunit { font-size: 0.72rem; color: var(--dim); margin-left: 2px; }
+
+/* dim readout when idle */
+body:not([data-state='running']):not([data-state='equilibrating']) #readout span {
+  color: var(--dim);
+  font-size: 1rem;
+}
 
 /* ── Peaks / results ──────────────────────────────────────────────────────── */
 
@@ -233,8 +277,34 @@ html, body {
 
 /* ── Axis toggle ──────────────────────────────────────────────────────────── */
 
-.toggle-row { display: flex; gap: 6px; align-items: center; font-size: 0.8rem; color: var(--dim); }
-.toggle-row button.active { border-color: var(--accent); color: var(--accent); }
+.toggle-row { display: flex; gap: 6px; align-items: center; font-size: 0.78rem; color: var(--dim); }
+.toggle-row button.active { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+
+/* ── Advanced timing <details> ────────────────────────────────────────────── */
+.adv-summary {
+  font-size: 0.75rem;
+  color: var(--dim);
+  cursor: pointer;
+  margin-bottom: 8px;
+  user-select: none;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.adv-summary::-webkit-details-marker { display: none; }
+.adv-summary:hover { color: var(--text); }
+details[open] .adv-summary .adv-arrow { transform: rotate(90deg); }
+.adv-arrow { transition: transform 0.15s; display: inline-block; }
+
+/* ── Scan time estimate ────────────────────────────────────────────────────── */
+#scan-estimate {
+  font-size: 0.75rem;
+  color: var(--dim);
+  margin-top: 4px;
+  font-family: var(--font-mono);
+}
+#scan-estimate span { color: var(--text); }
 
 /* ── Toast ────────────────────────────────────────────────────────────────── */
 

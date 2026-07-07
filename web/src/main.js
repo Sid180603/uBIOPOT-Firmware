@@ -28,12 +28,12 @@ import {
 const WS_URL    = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
 const WS_RETRY  = 3000;   // ms between reconnection attempts
 
-// Series colors per electrode (matches TFT palette)
+// Series colors — electrode 1 is accent-aligned; ref is amber (high contrast dashed)
 const COLORS = {
-  1: '#00b4d8',   // teal  — electrode 1
-  2: '#f9826c',   // amber — electrode 2
-  3: '#7986cb',   // indigo — electrode 3
-  0: '#8b949e',   // grey — reference / unknown
+  1: '#38bdf8',   // sky blue — matches --accent
+  2: '#f9826c',   // salmon-orange
+  3: '#a78bfa',   // violet (distinct from accent + electrode 2)
+  0: '#fbbf24',   // amber — reference overlay, reads well dashed on dark
 };
 
 // =============================================================================
@@ -232,11 +232,14 @@ function handleEvent(msg) {
 }
 
 function updateState(state, msg) {
+  // Ambient visual state — CSS uses body[data-state='...'] for chart glow
+  document.body.dataset.state = state.toLowerCase();
+
   switch (state) {
     case STATE.IDLE:
     case STATE.COMPLETE:
       $dot.className    = 'status-dot connected';
-      $wsLabel.textContent = state === STATE.COMPLETE ? 'Scan complete' : 'IDLE — ready';
+      $wsLabel.textContent = state === STATE.COMPLETE ? 'Scan complete' : 'Ready';
       $btnStart.disabled = false;
       $btnAbort.disabled = true;
       $btnCsv.disabled   = core.points.length === 0;
@@ -253,7 +256,7 @@ function updateState(state, msg) {
 
     case STATE.RUNNING:
       $dot.className    = 'status-dot running';
-      $wsLabel.textContent = 'RUNNING…';
+      $wsLabel.textContent = 'Running scan…';
       $btnStart.disabled = true;
       $btnAbort.disabled = false;
       $ptsCount.style.display = '';
@@ -266,7 +269,7 @@ function updateState(state, msg) {
 
     case STATE.ERROR:
       $dot.className = 'status-dot error';
-      $wsLabel.textContent = 'Error';
+      $wsLabel.textContent = 'Scan error';
       $btnStart.disabled = false;
       $btnAbort.disabled = true;
       break;
@@ -275,6 +278,22 @@ function updateState(state, msg) {
 
 function handleHello(info) {
   $fwInfo.textContent = `fw ${info.fw || '?'} / proto ${info.proto || '?'}`;
+}
+
+// =============================================================================
+// Scan time estimate
+// =============================================================================
+
+function updateScanEstimate() {
+  const p = readParams();
+  if (!p) return;
+  const steps = Math.abs(p.e_end_mV - p.e_begin_mV) / p.e_step_mV;
+  const ms    = Math.ceil(steps) * p.t_period_ms + p.t_equilibration_ms;
+  const el    = document.getElementById('scan-estimate-val');
+  if (!el) return;
+  el.textContent = ms < 60000
+    ? `~${(ms / 1000).toFixed(0)} s`
+    : `~${(ms / 60000).toFixed(1)} min`;
 }
 
 function handleResync(pts, state) {
@@ -308,6 +327,7 @@ function connect() {
     $dot.className = 'status-dot connected';
     $wsLabel.textContent = 'Connected';
     $btnStart.disabled   = false;
+    document.body.dataset.state = 'idle';
     clearTimeout(wsRetryId);
     wsRetryId = null;
   };
@@ -541,6 +561,16 @@ function showError(msg) {
 // =============================================================================
 // Boot
 // =============================================================================
+
+// Initial body state
+document.body.dataset.state = 'idle';
+
+// Hook scan estimate to form changes
+const $dpvForm = document.getElementById('dpv-form');
+if ($dpvForm) {
+  $dpvForm.addEventListener('input', updateScanEstimate);
+  updateScanEstimate();
+}
 
 createChart();
 connect();

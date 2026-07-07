@@ -148,3 +148,133 @@ jobs:
           name: playwright-report
           path: web/playwright-report/
           retention-days: 7
+
+  # ============================================================================
+  # Job 5: P7 serial protocol conformance tests (Python pytest, no hardware)
+  # Tests the NDJSON serial wire format, event/command name parity with P5 WS
+  # protocol, mock serial stream parsing, and command structure validation.
+  # All tests run in-process — no device, no real serial port needed.
+  # Skips live-device tests (Section C) since AQUAHMET_PORT is not set in CI.
+  # ============================================================================
+  serial-protocol-conformance:
+    name: P7 Serial Protocol Conformance Tests (Python pytest)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install test dependencies
+        run: pip install -r test/requirements.txt
+
+      - name: Run P7 serial protocol conformance tests (no device)
+        run: pytest test/test_p7_serial.py -v -k "not device" --tb=short
+
+      - name: Verify serial_comms_protocol.h is IDF-free (host-testable invariant)
+        run: |
+          echo "=== Checking serial_comms_protocol.h for forbidden #include directives ==="
+          if grep -n '^#include.*esp_' components/serial_comms/include/serial_comms_protocol.h; then
+            echo "FAIL: serial_comms_protocol.h includes esp_* — breaks host testability"
+            exit 1
+          fi
+          if grep -n '^#include.*freertos\|^#include.*FreeRTOS' components/serial_comms/include/serial_comms_protocol.h; then
+            echo "FAIL: serial_comms_protocol.h includes FreeRTOS — breaks host testability"
+            exit 1
+          fi
+          echo "PASS: serial_comms_protocol.h is IDF-free"
+
+  # ============================================================================
+  # Job 6: P7 PTY / pipe E2E serial tests (Python pytest, no hardware)
+  # Tests the full NDJSON command/response cycle via an in-process MockDevice
+  # that drives the same Gaussian cell model as the Wokwi ADS1115 chip.
+  # Uses os.pipe() (skipped on Windows CI; runs on ubuntu-latest).
+  # ============================================================================
+  serial-pty-e2e:
+    name: P7 Serial PTY E2E Tests (Python pytest, pipe-based MockDevice)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install test dependencies
+        run: pip install -r test/requirements.txt
+
+      - name: Run P7 pipe E2E tests (no device, no socat needed)
+        run: pytest test/test_p7_pty.py -v -k "not device" --tb=short
+
+  # ============================================================================
+  # Job 7: L7 Wokwi full-device simulation (free OSS tier)
+  #
+  # Runs the REAL compiled firmware binary inside the Wokwi ESP32 simulator with:
+  #   - Custom MCP4921 SPI DAC chip      (chips/mcp4921.c → .wasm)
+  #   - Custom ADS1115 I2C ADC chip      (chips/ads1115.c  → .wasm)
+  #   - ILI9341 TFT display (built-in Wokwi part)
+  #   - 2× pushbuttons + 2× LEDs (GPIO14/0/12/13)
+  # The ADS1115 chip embeds the Gaussian DPV cell simulator — the same model
+  # used in sim/main_sim.c and test/mock_ws_server.py (shared model invariant).
+  #
+  # Token: get a FREE token for public repos at https://wokwi.com/dashboard/ci
+  # Add it as a GitHub secret named WOKWI_CLI_TOKEN in Settings → Secrets → Actions.
+  #
+  # If WOKWI_CLI_TOKEN is not set, this job is SKIPPED — CI still passes.
+  # ============================================================================
+  wokwi-simulation:
+    name: L7 Wokwi Full-Device Simulation (ESP32 + custom chips)
+    runs-on: ubuntu-latest
+    needs: firmware-build          # wait for firmware binary to be confirmed linkable
+    if: ${{ secrets.WOKWI_CLI_TOKEN != '' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build firmware (ESP-IDF v5.4.4)
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.4.4
+          target: esp32
+          path: '.'
+          command: idf.py build
+
+      - name: Install wokwi-cli
+        run: curl -L https://wokwi.com/ci/install.sh | sh
+
+      - name: Compile custom chips to WASM
+        env:
+          WOKWI_CLI_TOKEN: ${{ secrets.WOKWI_CLI_TOKEN }}
+        run: |
+          echo "=== Compiling MCP4921 SPI DAC chip ==="
+          wokwi-cli chip compile chips/mcp4921.c -o chips/mcp4921.chip.wasm
+          echo "=== Compiling ADS1115 I2C ADC chip ==="
+          wokwi-cli chip compile chips/ads1115.c  -o chips/ads1115.chip.wasm
+          echo "=== Custom chips compiled successfully ==="
+          ls -lh chips/*.wasm
+
+      - name: Run Wokwi simulation — expect serial hello handshake
+        uses: wokwi/wokwi-ci-action@v1
+        with:
+          token: ${{ secrets.WOKWI_CLI_TOKEN }}
+          path: .
+          timeout: 30000
+          expect_text: '"t":"hello"'
+          fail_text: '"t":"error"'
+          serial_log_file: wokwi-serial.log
+
+      - name: Upload Wokwi serial log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wokwi-serial-log
+          path: wokwi-serial.log
+          retention-days: 7

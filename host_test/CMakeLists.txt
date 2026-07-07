@@ -72,3 +72,22 @@ target_include_directories(test_net_comms PRIVATE
 target_link_libraries(test_net_comms PRIVATE unity m)
 target_compile_options(test_net_comms PRIVATE -Wall -Wextra -Wpedantic)
 add_test(NAME test_net_comms COMMAND test_net_comms)
+
+# ==============================================================================
+# P7 serial_comms protocol tests
+# Includes serial_comms_protocol.h (pure header, no IDF sources needed) and
+# net_comms_protocol.h for parity assertions.  Also tests the echem_core
+# NDJSON formatters (protocol.c) to verify serial event/point line output.
+# ==============================================================================
+set(SERIAL_COMMS_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/../components/serial_comms/include")
+
+add_executable(test_serial_protocol test_serial_protocol.c ${ECHEM_CORE_SRCS})
+target_include_directories(test_serial_protocol PRIVATE
+    "${SERIAL_COMMS_INCLUDE}"
+    "${NET_COMMS_INCLUDE}"
+    "${ECHEM_CORE_DIR}/include"
+    "${unity_SOURCE_DIR}/src"
+)
+target_link_libraries(test_serial_protocol PRIVATE unity m)
+target_compile_options(test_serial_protocol PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME test_serial_protocol COMMAND test_serial_protocol)

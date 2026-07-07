@@ -7,6 +7,7 @@ idf_component_register(
         acq_engine
         ui_tft
         net_comms
+        serial_comms
         nvs_flash
         log
 )

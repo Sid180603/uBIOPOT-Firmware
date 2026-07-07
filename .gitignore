@@ -4,6 +4,13 @@ sdkconfig
 sdkconfig.old
 managed_components/
 
+# Wokwi custom chip WASM binaries (compiled by CI / wokwi-cli chip compile)
+# Source .c files ARE committed; compiled .wasm are NOT.
+chips/*.wasm
+# wokwi-api.h is downloaded automatically by wokwi-cli at compile time
+wokwi-api.h
+chips/wokwi-api.h
+
 # Binary outputs (generated; not source)
 *.bin
 *.elf
@@ -24,10 +31,6 @@ web/node_modules/
 web/.vite/
 web/playwright-report/
 web/test-results/
-# Garbage: some tools write to absolute Windows paths (C:\...) and create mangled dirs here.
-# Pattern: any web/ subdir starting with a capital letter followed by 'Users' (Windows path leak).
-web/C*/
-web/D*/
 
 # Python
 __pycache__/

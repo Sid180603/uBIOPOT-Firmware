@@ -1,5 +1,7 @@
-# Python test dependencies for Aqua-HMET P5 protocol conformance tests
+# Python test dependencies for Aqua-HMET protocol conformance tests (P5, P7)
 # Install: pip install -r test/requirements.txt
 pytest>=7.4.0
 pytest-asyncio>=0.23.0
 websockets>=12.0
+# P7 reference client + live device tests
+pyserial>=3.5

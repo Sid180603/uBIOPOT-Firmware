@@ -1,0 +1,40 @@
+# wokwi.toml — Aqua-HMET Wokwi simulation configuration (L7 test pyramid)
+#
+# Usage
+# -----
+# VS Code:  Press F1 → "Wokwi: Start Simulator" (requires Wokwi VS Code extension).
+# CI:       See .github/workflows/ci.yml job "wokwi-simulation" (requires WOKWI_CLI_TOKEN secret).
+#           Get a free token for open-source repos at https://wokwi.com/dashboard/ci
+#
+# Before simulating, build the firmware:
+#   bash -c "cd '/c/Users/.../uBIOPOT-Firmware' && source /home/Sid18/esp/esp-idf/export.sh && idf.py build"
+#
+# ESP-IDF firmware: flasher_args.json automatically loads bootloader + partition table + app.
+# ELF file: enables faster simulation startup and better debugging.
+
+[wokwi]
+version  = 1
+firmware = 'build/flasher_args.json'
+elf      = 'build/aquahmet.elf'
+
+# RFC2217 serial forwarding (VS Code only — lets you connect a Python client to the sim UART).
+# After starting the simulator, connect with:
+#   python tools/serial_client.py --port rfc2217://localhost:4000 --start --electrode 3
+rfc2217ServerPort = 4000
+
+# Custom chips
+# ------------
+# MCP4921: 12-bit SPI DAC. Receives 16-bit SPI word → outputs analog voltage on VOUT.
+# ADS1115: 16-bit I2C ADC with built-in electrochemical cell simulator.
+#          Reads the DAC output voltage → computes synthetic DPV current (Gaussian peaks).
+# Both chips must be compiled to WASM before running:
+#   cd chips && wokwi-cli chip compile mcp4921.c -o mcp4921.chip.wasm
+#   cd chips && wokwi-cli chip compile ads1115.c  -o ads1115.chip.wasm
+
+[[chip]]
+name   = 'mcp4921'
+binary = 'chips/mcp4921.chip.wasm'
+
+[[chip]]
+name   = 'ads1115'
+binary = 'chips/ads1115.chip.wasm'

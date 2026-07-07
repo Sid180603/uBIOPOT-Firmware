@@ -9,6 +9,7 @@
 #include "acq_engine.h"
 #include "ui_tft.h"
 #include "net_comms.h"
+#include "serial_comms.h"
 
 static const char *TAG = "aqua-hmet";
 
@@ -88,6 +89,13 @@ void app_main(void)
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "net_comms_start FAILED: %s -- WiFi unavailable", esp_err_to_name(ret));
         /* Non-fatal: TFT UI and serial (P7) still work */
+    }
+
+    /* ---- P7: UART0 NDJSON serial protocol (RX task + engine sink) ---- */
+    ret = serial_comms_start();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "serial_comms_start FAILED: %s", esp_err_to_name(ret));
+        /* Non-fatal: WiFi and TFT UIs still work */
     }
 
     for (;;) {

@@ -24,6 +24,10 @@ web/node_modules/
 web/.vite/
 web/playwright-report/
 web/test-results/
+# Garbage: some tools write to absolute Windows paths (C:\...) and create mangled dirs here.
+# Pattern: any web/ subdir starting with a capital letter followed by 'Users' (Windows path leak).
+web/C*/
+web/D*/
 
 # Python
 __pycache__/

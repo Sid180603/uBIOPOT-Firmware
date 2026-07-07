@@ -48,7 +48,7 @@ html,body{height:100%;background:var(--bg);color:var(--txt);font-family:'Segoe U
 .f input,.f select{background:var(--sur2);border:1px solid var(--brd);border-radius:var(--r2);color:var(--txt);font-size:.85rem;padding:5px 8px;width:100%;outline:none}
 .f input:focus,.f select:focus{border-color:var(--acc)}
 .ferr{font-size:.7rem;color:var(--red);display:none}
-.finv input{border-color:var(--red)}.finv .ferr{display:block}
+.invalid input{border-color:var(--red)}.invalid .ferr{display:block}
 .btn{border:1px solid var(--brd);border-radius:var(--r2);background:transparent;color:var(--txt);font-size:.85rem;padding:6px 12px;cursor:pointer;transition:background .15s,border-color .15s;white-space:nowrap}
 .btn:hover{background:var(--sur2)}.btn:disabled{opacity:.4;cursor:not-allowed}
 .btnp{background:var(--acc2);border-color:var(--acc);color:#fff;font-weight:600}.btnp:hover{background:var(--acc)}
@@ -64,9 +64,9 @@ body:not([data-state='running']):not([data-state='equilibrating']) #rdout span{c
 .pi{display:flex;align-items:center;gap:12px;background:var(--sur2);border:1px solid var(--brd);border-radius:var(--r2);padding:8px 12px;font-size:.85rem;margin-bottom:6px}
 .pe{color:var(--acc);font-weight:600;min-width:80px}.pI{color:var(--txt);font-weight:600;min-width:80px}
 .trow{display:flex;gap:6px;align-items:center;font-size:.8rem;color:var(--dim)}
-.trow .btn.act{border-color:var(--acc);color:var(--acc)}
+.trow .btn.active{border-color:var(--acc);color:var(--acc)}
 #toast{position:fixed;top:-80px;left:50%;transform:translateX(-50%);background:var(--red);color:#fff;padding:10px 20px;border-radius:var(--r);font-size:.9rem;font-weight:500;box-shadow:0 4px 16px rgba(0,0,0,.5);transition:top .3s ease;z-index:100;max-width:90vw;text-align:center}
-#toast.vis{top:16px}#toast.inf{background:var(--acc2)}
+#toast.visible{top:16px}#toast.inf{background:var(--acc2)}
 .adv-summary{font-size:.75rem;color:var(--dim);cursor:pointer;margin-bottom:8px;user-select:none;list-style:none;display:flex;align-items:center;gap:4px}.adv-summary::-webkit-details-marker{display:none}.adv-summary:hover{color:var(--txt)}.adv-arr{transition:transform .15s;display:inline-block}details[open] .adv-arr{transform:rotate(90deg)}
 #scan-est{font-size:.75rem;color:var(--dim);margin-top:4px;font-family:var(--mono)}#scan-est span{color:var(--txt)}
 body[data-state='running'] #cw{box-shadow:0 0 0 1px var(--amb),0 0 12px rgba(251,191,36,.08);border-radius:var(--r)}
@@ -82,7 +82,7 @@ body[data-state='error'] #cw{box-shadow:0 0 0 1px var(--red),0 0 12px rgba(248,1
     <div id="wss">
       <div class="dot" id="dot"></div>
       <span id="wsl">Connecting…</span>
-      <span id="ptsw" style="margin-left:8px;display:none"><span id="ptv">0</span> pts</span>
+      <span id="ptsw" style="margin-left:8px;display:none"><span id="pts-val">0</span> pts</span>
     </div>
   </div>
 
@@ -90,19 +90,19 @@ body[data-state='error'] #cw{box-shadow:0 0 0 1px var(--red),0 0 12px rgba(248,1
     <div id="left">
       <div class="card">
         <div class="ct">DPV Parameters</div>
-        <div class="f" id="fe1"><label>E begin (mV)</label><input type="number" id="eb" value="-500" step="10"><div class="ferr">±1000 mV</div></div>
-        <div class="f" id="fe2"><label>E end (mV)</label><input type="number" id="ee" value="500" step="10"><div class="ferr">±1000 mV</div></div>
-        <div class="f" id="fe3"><label>E step (mV)</label><input type="number" id="es" value="5" step="1" min="1"><div class="ferr">&gt;0</div></div>
-        <div class="f" id="fe4"><label>E pulse (mV)</label><input type="number" id="ep" value="25" step="5" min="1"><div class="ferr">&gt;0</div></div>
-        <div class="f"><label>t pulse (ms)</label><input type="number" id="tp" value="50" step="10" min="1"></div>
+        <div class="f" id="fe1"><label>E begin (mV)</label><input type="number" id="e-begin" value="-500" step="10"><div class="ferr">±1000 mV</div></div>
+        <div class="f" id="fe2"><label>E end (mV)</label><input type="number" id="e-end" value="500" step="10"><div class="ferr">±1000 mV</div></div>
+        <div class="f" id="fe3"><label>E step (mV)</label><input type="number" id="e-step" value="5" step="1" min="1"><div class="ferr">&gt;0</div></div>
+        <div class="f" id="fe4"><label>E pulse (mV)</label><input type="number" id="e-pulse" value="25" step="5" min="1"><div class="ferr">&gt;0</div></div>
+        <div class="f"><label>t pulse (ms)</label><input type="number" id="t-pulse" value="50" step="10" min="1"></div>
         <details>
           <summary class="adv-summary"><span class="adv-arr">▶</span> Advanced timing</summary>
-          <div class="f" id="fe5"><label>t period (ms)</label><input type="number" id="tpr" value="200" step="10" min="2"><div class="ferr">Must &gt; t pulse</div></div>
-          <div class="f"><label>Equilibration (ms)</label><input type="number" id="teq" value="2000" step="500" min="0"></div>
+          <div class="f" id="fe5"><label>t period (ms)</label><input type="number" id="t-period" value="200" step="10" min="2"><div class="ferr">Must &gt; t pulse</div></div>
+          <div class="f"><label>Equilibration (ms)</label><input type="number" id="t-equil" value="2000" step="500" min="0"></div>
         </details>
         <div id="scan-est" style="margin-bottom:6px">Est: <span id="sest">—</span></div>
         <div class="f"><label>Electrode</label>
-          <select id="elec">
+          <select id="electrode">
             <option value="1">Electrode 1</option>
             <option value="2">Electrode 2</option>
             <option value="3">Electrode 3</option>
@@ -119,10 +119,10 @@ body[data-state='error'] #cw{box-shadow:0 0 0 1px var(--red),0 0 12px rgba(248,1
         <div class="ct">Overlay Reference Scan</div>
         <p style="font-size:.75rem;color:var(--dim);margin-bottom:8px">Import a CSV from another instrument to compare traces on the same axes.</p>
         <div class="brow">
-          <label class="btn" style="cursor:pointer">⬆ Import CSV<input type="file" accept=".csv,.txt" id="rff" style="display:none"></label>
+          <label class="btn" style="cursor:pointer">⬆ Import CSV<input type="file" accept=".csv,.txt" id="ref-file" style="display:none"></label>
           <button class="btn" id="bclr" disabled>✕ Clear</button>
         </div>
-        <div id="rfi" style="font-size:.75rem;color:var(--dim);margin-top:6px"></div>
+        <div id="ref-info" style="font-size:.75rem;color:var(--dim);margin-top:6px"></div>
       </div>
     </div>
 
@@ -132,8 +132,8 @@ body[data-state='error'] #cw{box-shadow:0 0 0 1px var(--red),0 0 12px rgba(248,1
           Voltammogram (ΔI vs E)
           <span style="float:right">
             <span class="trow">
-              <button class="btn act" id="xc" style="padding:2px 8px;font-size:.75rem" data-testid="xaxis-cmd">Commanded V</button>
-              <button class="btn"     id="xr" style="padding:2px 8px;font-size:.75rem" data-testid="xaxis-re">Measured RE</button>
+              <button class="btn active" id="xaxis-cmd" style="padding:2px 8px;font-size:.75rem" data-testid="xaxis-cmd">Commanded V</button>
+              <button class="btn"     id="xaxis-re" style="padding:2px 8px;font-size:.75rem" data-testid="xaxis-re">Measured RE</button>
             </span>
           </span>
         </div>
@@ -190,7 +190,7 @@ let refSeries={xs:[],ys:[]};
 
 // ── DOM refs ─────────────────────────────────────────────────────────────────
 const $=id=>document.getElementById(id);
-const dot=$('dot'),wsl=$('wsl'),ptsw=$('ptsw'),ptv=$('ptv');
+const dot=$('dot'),wsl=$('wsl'),ptsw=$('ptsw'),ptv=$('pts-val');
 const bst=$('bst'),bab=$('bab'),bcsv=$('bcsv');
 const lE=$('lE'),lI=$('lI'),lEl=$('lEl');
 const pks=$('pks'),pke=$('pke');
@@ -396,18 +396,18 @@ function handleResync(){
 // ── Form & controls ───────────────────────────────────────────────────────────
 function readParams(){
   return{
-    e_begin_mV:parseFloat($('eb').value),e_end_mV:parseFloat($('ee').value),
-    e_step_mV:parseFloat($('es').value),e_pulse_mV:parseFloat($('ep').value),
-    t_pulse_ms:parseInt($('tp').value),t_period_ms:parseInt($('tpr').value),
-    t_equilibration_ms:parseInt($('teq').value),
-    electrode:parseInt($('elec').value),cycles:1,n_avg:5
+    e_begin_mV:parseFloat($('e-begin').value),e_end_mV:parseFloat($('e-end').value),
+    e_step_mV:parseFloat($('e-step').value),e_pulse_mV:parseFloat($('e-pulse').value),
+    t_pulse_ms:parseInt($('t-pulse').value),t_period_ms:parseInt($('t-period').value),
+    t_equilibration_ms:parseInt($('t-equil').value),
+    electrode:parseInt($('electrode').value),cycles:1,n_avg:5
   };
 }
 
 function validateForm(){
   const p=readParams();
   let ok=true;
-  function chk(id,bad){const el=$(id);el.classList.toggle('finv',bad);if(bad)ok=false;}
+  function chk(id,bad){const el=$(id);el.classList.toggle('invalid',bad);if(bad)ok=false;}
   chk('fe1',p.e_begin_mV<-1000||p.e_begin_mV>1000);
   chk('fe2',p.e_end_mV<-1000||p.e_end_mV>1000);
   chk('fe3',p.e_step_mV<=0);chk('fe4',p.e_pulse_mV<=0);
@@ -436,7 +436,7 @@ bcsv.addEventListener('click',()=>{
 });
 
 // ── Reference CSV ─────────────────────────────────────────────────────────────
-$('rff').addEventListener('change',ev=>{
+$('ref-file').addEventListener('change',ev=>{
   const f=ev.target.files[0];if(!f)return;
   const r=new FileReader();
   r.onload=e=>{
@@ -449,7 +449,7 @@ $('rff').addEventListener('change',ev=>{
       refSeries.xs.push(xMode==='re'?E:E);refSeries.ys.push(I);idx++;
     }
     hasRef=refSeries.xs.length>0;
-    $('rfi').textContent=hasRef?`${refSeries.xs.length} pts loaded`:'No data found';
+    $('ref-info').textContent=hasRef?`${refSeries.xs.length} pts loaded`:'No data found';
     $('refleg').style.display=hasRef?'flex':'none';
     $('bclr').disabled=!hasRef;
     drawChart();
@@ -459,13 +459,13 @@ $('rff').addEventListener('change',ev=>{
 });
 $('bclr').addEventListener('click',()=>{
   hasRef=false;refSeries={xs:[],ys:[]};
-  $('rfi').textContent='';$('refleg').style.display='none';$('bclr').disabled=true;
+  $('ref-info').textContent='';$('refleg').style.display='none';$('bclr').disabled=true;
   drawChart();
 });
 
 // ── x-axis toggle ─────────────────────────────────────────────────────────────
 function setX(m){
-  xMode=m;$('xc').classList.toggle('act',m==='cmd');$('xr').classList.toggle('act',m==='re');
+  xMode=m;$('xaxis-cmd').classList.toggle('active',m==='cmd');$('xaxis-re').classList.toggle('active',m==='re');
   scanSeries={};
   for(const pt of pts){
     const x=m==='re'?pt.RE_mV:pt.E_mV;
@@ -475,8 +475,8 @@ function setX(m){
   if(hasRef)refSeries.xs=refSeries.xs.map((_,i)=>refPts[i]?refPts[i].E_mV:refSeries.xs[i]);
   drawChart();
 }
-$('xc').addEventListener('click',()=>setX('cmd'));
-$('xr').addEventListener('click',()=>setX('re'));
+$('xaxis-cmd').addEventListener('click',()=>setX('cmd'));
+$('xaxis-re').addEventListener('click',()=>setX('re'));
 
 // ── Peak detection ────────────────────────────────────────────────────────────
 function runPeaks(){
@@ -510,14 +510,14 @@ function runPeaks(){
 // ── Toast ─────────────────────────────────────────────────────────────────────
 let tTimer=null;
 function showToast(msg,type='err'){
-  toast.textContent=msg;toast.className=type==='inf'?'vis inf':'vis';
+  toast.textContent=msg;toast.className=type==='inf'?'visible inf':'visible';
   clearTimeout(tTimer);tTimer=setTimeout(()=>toast.className='',3500);
 }
 // ── Scan estimate ───────────────────────────────────────────────────────────
   const sestEl=$('sest');
   function updEst(){
-    const steps=Math.abs(parseFloat($('ee').value)-parseFloat($('eb').value))/parseFloat($('es').value);
-    const ms=Math.ceil(steps)*parseInt($('tpr').value)+parseInt($('teq').value);
+    const steps=Math.abs(parseFloat($('e-end').value)-parseFloat($('e-begin').value))/parseFloat($('e-step').value);
+    const ms=Math.ceil(steps)*parseInt($('t-period').value)+parseInt($('t-equil').value);
     if(sestEl)sestEl.textContent=isFinite(ms)?(ms<60000?`~${(ms/1000).toFixed(0)} s`:`~${(ms/60000).toFixed(1)} min`):'?';
   }
   document.querySelector('.card')?.addEventListener('input',updEst);

@@ -60,7 +60,7 @@ html, body {
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
-#topbar h1 .logo { font-size: 1rem; margin-right: 4px; }
+#topbar h1 [aria-hidden] { font-size: 1rem; margin-right: 4px; }
 
 #ws-status {
   display: flex;

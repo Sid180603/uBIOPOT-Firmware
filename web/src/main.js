@@ -138,18 +138,18 @@ function createChart() {
     axes: [
       {
         label:  'E (mV)',
-        stroke: '#8b949e',
-        grid:   { stroke: '#21262d', width: 1 },
-        ticks:  { stroke: '#21262d' },
-        font:   '11px Segoe UI, sans-serif',
+        stroke: '#7491a8',
+        grid:   { stroke: '#162033', width: 1 },
+        ticks:  { stroke: '#162033' },
+        font:   '11px IBM Plex Mono, monospace',
         values: (_, vals) => vals.map(v => v == null ? '' : v.toFixed(0)),
       },
       {
         label:   'ΔI (µA)',
-        stroke:  '#8b949e',
-        grid:    { stroke: '#21262d', width: 1 },
-        ticks:   { stroke: '#21262d' },
-        font:    '11px Segoe UI, sans-serif',
+        stroke:  '#7491a8',
+        grid:    { stroke: '#162033', width: 1 },
+        ticks:   { stroke: '#162033' },
+        font:    '11px IBM Plex Mono, monospace',
         values:  (_, vals) => vals.map(v => v == null ? '' : v.toFixed(1)),
         size:    50,
       },
@@ -441,6 +441,10 @@ function validateForm() {
     const el = document.getElementById(id);
     if (test(params)) { el.classList.add('invalid'); anyInvalid = true; }
     else              { el.classList.remove('invalid'); }
+  }
+  // If t_period is invalid it's hidden inside <details> — force-open so the red field is visible
+  if (document.getElementById('f-t-period')?.classList.contains('invalid')) {
+    document.querySelector('details')?.setAttribute('open', '');
   }
   return anyInvalid ? null : params;
 }

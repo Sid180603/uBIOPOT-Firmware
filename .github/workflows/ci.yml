@@ -232,14 +232,31 @@ jobs:
   wokwi-simulation:
     name: L7 Wokwi Full-Device Simulation (ESP32 + custom chips)
     runs-on: ubuntu-latest
-    needs: firmware-build          # wait for firmware binary to be confirmed linkable
-    if: ${{ secrets.WOKWI_CLI_TOKEN != '' }}
+    needs: firmware-build
+    # Note: 'secrets' context is NOT available in job-level 'if' expressions
+    # (GitHub Actions limitation — only available at step level).
+    # We guard each step with an env flag set by the first step instead.
 
     steps:
+      - name: Check WOKWI_CLI_TOKEN (skip job gracefully if not set)
+        env:
+          WOKWI_CLI_TOKEN: ${{ secrets.WOKWI_CLI_TOKEN }}
+        run: |
+          if [ -z "$WOKWI_CLI_TOKEN" ]; then
+            echo "::notice::WOKWI_CLI_TOKEN secret is not configured — skipping L7 Wokwi simulation."
+            echo "To enable: get a FREE token at https://wokwi.com/dashboard/ci"
+            echo "           then add it as a GitHub secret named WOKWI_CLI_TOKEN."
+            echo "SKIP_WOKWI=true" >> "$GITHUB_ENV"
+          else
+            echo "WOKWI_CLI_TOKEN is set — proceeding with simulation."
+            echo "SKIP_WOKWI=false" >> "$GITHUB_ENV"
+          fi
       - name: Checkout repository
+        if: env.SKIP_WOKWI != 'true'
         uses: actions/checkout@v4
 
       - name: Build firmware (ESP-IDF v5.4.4)
+        if: env.SKIP_WOKWI != 'true'
         uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: v5.4.4
@@ -248,9 +265,11 @@ jobs:
           command: idf.py build
 
       - name: Install wokwi-cli
+        if: env.SKIP_WOKWI != 'true'
         run: curl -L https://wokwi.com/ci/install.sh | sh
 
       - name: Compile custom chips to WASM
+        if: env.SKIP_WOKWI != 'true'
         env:
           WOKWI_CLI_TOKEN: ${{ secrets.WOKWI_CLI_TOKEN }}
         run: |
@@ -262,6 +281,7 @@ jobs:
           ls -lh chips/*.wasm
 
       - name: Run Wokwi simulation — expect serial hello handshake
+        if: env.SKIP_WOKWI != 'true'
         uses: wokwi/wokwi-ci-action@v1
         with:
           token: ${{ secrets.WOKWI_CLI_TOKEN }}
@@ -272,7 +292,7 @@ jobs:
           serial_log_file: wokwi-serial.log
 
       - name: Upload Wokwi serial log
-        if: always()
+        if: env.SKIP_WOKWI != 'true' || failure()
         uses: actions/upload-artifact@v4
         with:
           name: wokwi-serial-log

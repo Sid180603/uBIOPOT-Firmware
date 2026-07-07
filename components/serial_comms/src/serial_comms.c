@@ -253,6 +253,7 @@ static void serial_rx_task(void *arg)
 
     char     line[SERIAL_CMD_LINE_MAX];
     int      line_len = 0;
+    bool     overflow = false;   /* true while draining an overlong line */
     uint8_t  chunk[SERIAL_CHUNK_BYTES];
 
     for (;;) {
@@ -264,7 +265,11 @@ static void serial_rx_task(void *arg)
             char c = (char)chunk[i];
 
             if (c == '\n' || c == '\r') {
-                if (line_len > 0) {
+                if (overflow) {
+                    /* End of an overlong line — resume normal accumulation */
+                    overflow  = false;
+                    line_len  = 0;
+                } else if (line_len > 0) {
                     line[line_len] = '\0';
                     /* Only process lines that look like JSON objects */
                     if (line[0] == '{') {
@@ -274,12 +279,15 @@ static void serial_rx_task(void *arg)
                     line_len = 0;
                 }
                 /* else: skip empty lines */
+            } else if (overflow) {
+                /* Draining overlong line — discard every byte until next newline */
             } else if (line_len < (int)SERIAL_CMD_LINE_MAX - 1) {
                 line[line_len++] = c;
             } else {
-                /* Line overflow — discard partial line, reset */
+                /* Line overflow — discard everything up to and including next newline */
                 ESP_LOGW(TAG, "RX: line overflow, discarding");
-                line_len = 0;
+                overflow  = true;
+                line_len  = 0;
             }
         }
     }
@@ -332,10 +340,25 @@ esp_err_t serial_comms_start(void)
                  CONFIG_UBIOPOT_SERIAL_BAUD);
     }
 
-    /* ---- Log routing (Option A): suppress INFO/DEBUG on UART0 ----
-     * ERROR and WARN still pass — host must skip lines not starting with '{'. */
-    esp_log_level_set("*", ESP_LOG_WARN);
-    ESP_LOGW(TAG, "Log level set to WARN for NDJSON stream on UART0");
+    /* ---- Log routing: suppress INFO/DEBUG from IDF framework components on
+     * UART0 to avoid corrupting the NDJSON stream.  App-level components (acq_engine,
+     * net_comms, ui_tft, etc.) retain their configured level so firmware errors remain
+     * visible.  The host parser skips any line that doesn't start with '{', so WARN/ERROR
+     * lines from IDF internals are also harmless — but suppressing at source reduces
+     * latency jitter on the serial port during active scans.
+     *
+     * Specifically targeted: the IDF WiFi, LwIP, and HTTP server stacks are the dominant
+     * sources of INFO-level output on UART0 after startup. */
+    esp_log_level_set("*",             ESP_LOG_WARN);   /* default: WARN for all */
+    esp_log_level_set("acq_engine",    ESP_LOG_INFO);   /* restore app components */
+    esp_log_level_set("net_comms",     ESP_LOG_INFO);
+    esp_log_level_set("serial_comms",  ESP_LOG_INFO);
+    esp_log_level_set("ui_tft",        ESP_LOG_INFO);
+    esp_log_level_set("hal_adc",       ESP_LOG_INFO);
+    esp_log_level_set("hal_dac",       ESP_LOG_INFO);
+    esp_log_level_set("hal_mux",       ESP_LOG_INFO);
+    esp_log_level_set("aqua-hmet",     ESP_LOG_INFO);
+    ESP_LOGI(TAG, "Log routing: IDF framework @ WARN, app components @ INFO");
 
     /* ---- TX mutex ---- */
     s_tx_mutex = xSemaphoreCreateMutex();

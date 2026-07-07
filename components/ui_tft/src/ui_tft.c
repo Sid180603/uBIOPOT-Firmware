@@ -130,20 +130,22 @@ static uint16_t s_pt_count = 0;
 static void sink_on_point(const DataPoint *pt, void *ctx)
 {
     (void)ctx;
-    /* Push to scan screen ring buffer (lock-free) */
+    /* scr_scan_push_point writes ONLY to the lock-free ring buffer (volatile
+     * head/tail + plain array — single-producer here, single-consumer in the
+     * LVGL flush timer).  No lvgl_port_lock() is taken: taking it here would
+     * risk deadlock if the LVGL task is blocked waiting for Dispatcher output,
+     * and is unnecessary because no LVGL object is touched directly.  The ring
+     * buffer is the intentional decoupling mechanism for this hot path. */
     scr_scan_push_point(pt->E_mV, pt->I_uA);
 
-    /* Mirror into local buffer for peak detection */
+    /* Mirror into local buffer for peak detection (written only by Dispatcher) */
     if (s_pt_count < PEAK_BUF_MAX) {
         s_E_buf[s_pt_count] = pt->E_mV;
         s_I_buf[s_pt_count] = pt->I_uA;
         s_pt_count++;
     }
 
-    /* Update step count if idx is valid */
-    /* (Total steps not known here — progress updated in on_event for now) */
-
-    /* Update LEDs from DispatcherTask (Core 0, non-critical) */
+    /* GPIO LED update — safe from any task, no LVGL involvement */
     pstat_led_set(PSTAT_LED_READY,      false);
     pstat_led_set(PSTAT_LED_PROCESSING, true);
 }

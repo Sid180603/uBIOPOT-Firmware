@@ -292,16 +292,16 @@ static void net_on_event(scan_event_t evt, const char *info, void *ctx)
     free(s);
 }
 
+/* Resync targeted to a single fd — ctx carries the fd as (void*)(intptr_t)fd */
 static void net_on_resync(const DataPoint *buf, uint16_t count,
                           scan_state_t state, void *ctx)
 {
-    (void)ctx;
-    /* ctx is the specific sink this resync was called for. */
-    /* We can't know which fd triggered the resync here without more plumbing.
-     * Broadcast to ALL clients — a client that just connected gets the replay;
-     * others receive a redundant resync (safe; they just re-draw). */
+    /* ctx encodes the target fd: non-NULL means unicast; NULL means broadcast.
+     * The broadcast path is only used if engine_resync() is ever called without a
+     * specific client context (not done after this fix; retained for safety). */
+    int target_fd = ctx ? (int)(intptr_t)ctx : -1;
 
-    /* Update local scan buffer */
+    /* Update local scan buffer (always — keeps it current regardless of send path) */
     if (xSemaphoreTake(s_scan_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
         uint16_t n = count < NET_SCAN_BUF_MAX ? count : NET_SCAN_BUF_MAX;
         if (buf && n > 0) memcpy(s_scan_buf, buf, n * sizeof(DataPoint));
@@ -309,7 +309,7 @@ static void net_on_resync(const DataPoint *buf, uint16_t count,
         xSemaphoreGive(s_scan_mutex);
     }
 
-    /* Send each point as a binary frame */
+    /* Send each point as a binary frame to the target fd only */
     for (uint16_t i = 0; i < count && i < NET_SCAN_BUF_MAX; i++) {
         ws_dp_frame_t frame = {
             .frame_type = WS_FRAME_TYPE_DATAPOINT,
@@ -319,10 +319,14 @@ static void net_on_resync(const DataPoint *buf, uint16_t count,
             .I_uA       = buf[i].I_uA,
             .RE_mV      = buf[i].RE_mV,
         };
-        ws_broadcast((uint8_t *)&frame, sizeof(frame), false);
+        if (target_fd >= 0) {
+            ws_send_to_fd(target_fd, (uint8_t *)&frame, sizeof(frame), false);
+        } else {
+            ws_broadcast((uint8_t *)&frame, sizeof(frame), false);
+        }
     }
 
-    /* Send state JSON */
+    /* Send resync_complete JSON */
     cJSON *j = cJSON_CreateObject();
     if (j) {
         cJSON_AddStringToObject(j, "t", "resync_complete");
@@ -331,7 +335,11 @@ static void net_on_resync(const DataPoint *buf, uint16_t count,
         char *s = cJSON_PrintUnformatted(j);
         cJSON_Delete(j);
         if (s) {
-            ws_broadcast((uint8_t *)s, strlen(s), true);
+            if (target_fd >= 0) {
+                ws_send_to_fd(target_fd, (uint8_t *)s, strlen(s), true);
+            } else {
+                ws_broadcast((uint8_t *)s, strlen(s), true);
+            }
             free(s);
         }
     }
@@ -370,8 +378,12 @@ static esp_err_t ws_handler(httpd_req_t *req)
             }
         }
 
-        /* Trigger resync so late-joining client rebuilds trace */
-        engine_resync(&s_net_sink);
+        /* Trigger resync targeted to this fd only — not a broadcast.
+         * We create a temporary sink whose ctx carries the fd so net_on_resync
+         * sends only to this client, not to all existing connections. */
+        engine_sink_t fd_sink = s_net_sink;
+        fd_sink.ctx = (void *)(intptr_t)fd;
+        engine_resync(&fd_sink);
         return ESP_OK;
     }
 
@@ -428,8 +440,10 @@ static esp_err_t ws_handler(httpd_req_t *req)
         }
 
     } else if (strcmp(cmd, "hello") == 0) {
-        /* Client re-hello: resync */
-        engine_resync(&s_net_sink);
+        /* Client re-hello: resync targeted to this fd only */
+        engine_sink_t fd_sink = s_net_sink;
+        fd_sink.ctx = (void *)(intptr_t)fd;
+        engine_resync(&fd_sink);
 
     } else if (strcmp(cmd, "start") == 0) {
         /* Parse params */
@@ -624,12 +638,21 @@ static esp_err_t api_reference_csv_handler(httpd_req_t *req)
         int to_read = MIN(remaining, (int)sizeof(chunk));
         int got = httpd_req_recv(req, chunk, to_read);
         if (got <= 0) { ok = false; break; }
-        fwrite(chunk, 1, got, f);
+        if (fwrite(chunk, 1, (size_t)got, f) != (size_t)got) {
+            ESP_LOGE(TAG, "reference CSV fwrite failed (LittleFS full?)");
+            ok = false;
+            break;
+        }
         remaining -= got;
     }
     fclose(f);
 
-    if (!ok) { httpd_resp_send_408(req); return ESP_OK; }
+    if (!ok) {
+        /* Remove the partial file so a subsequent upload isn't corrupted */
+        remove(LITTLEFS_BASE_PATH "/reference.csv");
+        httpd_resp_send_408(req);
+        return ESP_OK;
+    }
     httpd_resp_set_type(req, HTTPD_TYPE_JSON);
     httpd_resp_sendstr(req, "{\"ok\":true}");
     return ESP_OK;

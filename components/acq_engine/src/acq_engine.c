@@ -110,6 +110,7 @@ static int           s_sink_count;
 /* Per-scan tracking — only written by AcquisitionTask (Core 1). */
 static uint8_t  s_current_electrode;
 static uint16_t s_point_idx;
+static bool     s_equilib_done_posted; /* true after first point fires EQUILIB_DONE */
 
 /* ==========================================================================
  * Internal helpers
@@ -216,6 +217,17 @@ static bool eng_check_abort(void *ctx)
 static void eng_emit_point(float E_mV, float I_uA, float RE_mV, void *ctx)
 {
     (void)ctx;
+
+    /* On the very first data point of a scan, transition EQUILIBRATING → RUNNING
+     * and notify sinks.  This fires only after dpv_run() has completed its
+     * equilibration loop, so the EQUILIB_DONE event reaches sinks at the true
+     * end of physical equilibration — not prematurely before it starts. */
+    if (!s_equilib_done_posted) {
+        s_equilib_done_posted = true;
+        state_set(scan_state_next(SCAN_STATE_EQUILIBRATING, SCAN_EVT_EQUILIB_DONE));
+        post_event(SCAN_EVT_EQUILIB_DONE, NULL);
+    }
+
     DataPoint pt = {
         .electrode = s_current_electrode,
         .idx       = s_point_idx++,
@@ -353,8 +365,9 @@ static void acquisition_task(void *arg)
 
         for (uint8_t elec = elec_first; elec <= elec_last; elec++) {
 
-            s_current_electrode = elec;
-            s_point_idx         = 0;
+            s_current_electrode   = elec;
+            s_point_idx           = 0;
+            s_equilib_done_posted = false; /* reset per-electrode; first emit_point fires EQUILIB_DONE */
 
             /* BUG FIX: for electrodes after the first in an ELECTRODE_ALL scan,
              * the state is RUNNING (from the previous electrode), not IDLE.
@@ -362,24 +375,24 @@ static void acquisition_task(void *arg)
              * fires correctly and sinks see a consistent state sequence. */
             if (elec > elec_first) {
                 state_set(scan_state_next(SCAN_STATE_RUNNING, SCAN_EVT_SCAN_DONE));
+                post_event(SCAN_EVT_SCAN_DONE, NULL);
                 state_set(scan_state_next(SCAN_STATE_COMPLETE, SCAN_EVT_RESET));
+                post_event(SCAN_EVT_RESET, NULL);
             }
 
             /* Select electrode on mux. */
             pstat_mux_select(elec);
 
-            /* State: IDLE -> EQUILIBRATING. Notify sinks via scan_started event. */
+            /* State: IDLE -> EQUILIBRATING. Notify sinks — UI shows spinner.
+             * EQUILIB_DONE is deferred: eng_emit_point() fires it on the first
+             * real data point, after dpv_run() has completed its equilibration
+             * delay, so the spinner is visible for the true equilibration period. */
             state_set(scan_state_next(SCAN_STATE_IDLE, SCAN_EVT_START));
             post_event(SCAN_EVT_START, "DPV");
 
-            /* State: EQUILIBRATING -> RUNNING.
-             * The actual equilibration delay happens inside technique->run() via
-             * the injected delay_ms callback, so RUNNING starts immediately here.
-             * UIs see EQUILIBRATING briefly then RUNNING. */
-            state_set(scan_state_next(SCAN_STATE_EQUILIBRATING, SCAN_EVT_EQUILIB_DONE));
-            post_event(SCAN_EVT_EQUILIB_DONE, NULL);
-
-            /* Run the technique -- blocks for the full scan duration. */
+            /* Run the technique -- blocks for the full scan duration.
+             * The EQUILIBRATING -> RUNNING transition now happens inside
+             * eng_emit_point() on the first data point. */
             int rc = t->run(&params, s_cal, &s_hal_cb);
 
             if (rc > 0 || atomic_load(&s_abort_flag)) {
@@ -395,21 +408,41 @@ static void acquisition_task(void *arg)
         }
 
         /* Post-scan state transitions.
-         * scan_state_next() enforces valid transitions; no ad-hoc state writes. */
+         * scan_state_next() enforces valid transitions; no ad-hoc state writes.
+         *
+         * If abort fired during equilibration (before the first emit_point), the
+         * engine is still in EQUILIBRATING — transition through that state correctly. */
         if (aborted) {
-            state_set(scan_state_next(SCAN_STATE_RUNNING, SCAN_EVT_ABORTED));
+            scan_state_t cur = atomic_load(&s_scan_state);
+            if (cur == SCAN_STATE_EQUILIBRATING) {
+                /* Aborted before first data point — skip RUNNING entirely */
+                state_set(scan_state_next(SCAN_STATE_EQUILIBRATING, SCAN_EVT_ABORTED));
+            } else {
+                state_set(scan_state_next(SCAN_STATE_RUNNING, SCAN_EVT_ABORTED));
+            }
             post_event(SCAN_EVT_ABORTED, NULL);
             /* Auto-reset to IDLE. */
             state_set(scan_state_next(SCAN_STATE_ABORTING, SCAN_EVT_RESET));
             post_event(SCAN_EVT_RESET, NULL);
         } else if (error) {
-            state_set(scan_state_next(SCAN_STATE_RUNNING, SCAN_EVT_ERROR));
+            scan_state_t cur = atomic_load(&s_scan_state);
+            if (cur == SCAN_STATE_EQUILIBRATING) {
+                state_set(scan_state_next(SCAN_STATE_EQUILIBRATING, SCAN_EVT_ERROR));
+            } else {
+                state_set(scan_state_next(SCAN_STATE_RUNNING, SCAN_EVT_ERROR));
+            }
             post_event(SCAN_EVT_ERROR, "scan error");
             /* Auto-reset to IDLE. */
             state_set(scan_state_next(SCAN_STATE_ERROR, SCAN_EVT_RESET));
             post_event(SCAN_EVT_RESET, NULL);
         } else {
-            /* All electrodes completed normally. */
+            /* All electrodes completed normally.
+             * If no points were emitted (degenerate zero-step scan), the state
+             * is still EQUILIBRATING — transition through RUNNING first. */
+            if (!s_equilib_done_posted) {
+                state_set(scan_state_next(SCAN_STATE_EQUILIBRATING, SCAN_EVT_EQUILIB_DONE));
+                post_event(SCAN_EVT_EQUILIB_DONE, NULL);
+            }
             state_set(scan_state_next(SCAN_STATE_RUNNING, SCAN_EVT_SCAN_DONE));
             post_event(SCAN_EVT_SCAN_DONE, NULL);
             /* Auto-reset to IDLE. */

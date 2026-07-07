@@ -100,13 +100,18 @@ static int dpv_run(const technique_params_t *params,
     /* Equilibration: hold at e_begin to let the electrode stabilise.      */
     /* ------------------------------------------------------------------ */
     hal->set_voltage(p->e_begin_mV * mV_to_V, hal->ctx);
-    if (p->t_equilibration_ms > 0u) {
-        hal->delay_ms(p->t_equilibration_ms, hal->ctx);
-    }
 
-    /* Check abort even before the sweep starts. */
-    if (hal->check_abort(hal->ctx)) {
-        return 1; /* aborted */
+    /* Equilibration: break into 50 ms slices so abort is responsive.
+     * A single vTaskDelay(t_equilibration_ms) would hold Core 1 hostage for
+     * the full duration with no way to honour an in-flight abort request. */
+    uint32_t eq_remaining = p->t_equilibration_ms;
+    while (eq_remaining > 0u) {
+        uint32_t slice = eq_remaining < 50u ? eq_remaining : 50u;
+        hal->delay_ms(slice, hal->ctx);
+        eq_remaining -= slice;
+        if (hal->check_abort(hal->ctx)) {
+            return 1; /* aborted during equilibration */
+        }
     }
 
     /* ------------------------------------------------------------------ */

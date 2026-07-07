@@ -21,7 +21,8 @@ components/
   ui_tft/       — LVGL on-device UI: ILI9341 display, 2-button encoder navigation, live chart.
   net_comms/    — WiFi (SoftAP + STA), captive portal, mDNS, HTTP server, WebSocket (P5).
 host_test/      — Standalone CMake + Unity. Tests echem_core on host GCC (no hardware needed).
-web/            — SPA source (Vite → minify → gzip → LittleFS image, built in P6).
+web/            — SPA source (Vite + uPlot). Built output gzip-compressed → LittleFS image.
+                  Includes mock_backend.js (Node WS mock), Playwright E2E tests, potentiostat-core.js.
 ```
 
 ---
@@ -100,15 +101,15 @@ After the first build, commit the generated `dependencies.lock`:
 | P2 | ✅ Done | Electrochemistry core + full DPV algorithm + Unity host tests (all 4 suites green) |
 | P3 | ✅ Done | Acquisition engine (FreeRTOS Core-1 AcqTask, Core-0 Dispatcher, server-auth buffer, sink API) |
 | P4 | ✅ Done | On-device LVGL UI (ILI9341, 2-button encoder nav, 6 screens, live voltammogram, engine sink) — **display validated on real hardware** |
-| P5 | ⏳ | Connectivity (WiFi SoftAP+STA, captive portal, mDNS, WebSocket, HTTP API, LittleFS) |
-| P6 | ⏳ | Web SPA (uPlot, dark theme, live chart, CSV export/import overlay, Playwright tests) |
+| P5 | ✅ Done | Connectivity (WiFi SoftAP+STA, captive portal, mDNS, WebSocket, HTTP API, LittleFS) |
+| P6 | ✅ Done | Web SPA (uPlot, deep-ocean dark theme, live chart, CSV export/import overlay, 24 Playwright E2E tests) |
 | P7 | ⏳ | USB serial protocol (NDJSON, parity with web) — **publishable milestone** |
-| P8 | ⏳ | Persistence + calibration (NVS, auto-zero, bench calibration, concentration slopes) |
+| P8 | ⏳ | Persistence + calibration (NVS, auto-zero, bench calibration, concentration slopes, WHO threshold display) |
 | P9 | ⏳ | Integration + hardware validation vs commercial instrument + perf profiling + thesis figures |
 
 **Publishable milestone:** end of P7 — DPV working across TFT + WiFi web + USB serial simultaneously.
 
-**Build status (P4):** ~630 KB binary, 59% flash free, 0 errors.
+**Build status (P6):** ~630 KB binary pre-WiFi; final size to be updated after P7 build.
 
 ### Hardware bring-up (2026-07-05 · ESP32-D0WD-V3)
 
@@ -126,6 +127,23 @@ malloc + a huge host stack):
 2. **TFT orientation** — `esp_lvgl_port` re-applies `disp_cfg.rotation` to the panel via `esp_lcd`, overriding
    any manual `esp_lcd_panel_swap_xy/mirror`. Set orientation **only** in `lvgl_port_display_cfg_t.rotation`
    (`swap_xy/mirror_x/mirror_y = true` for this panel/mount) — manual MADCTL calls cause a stride-shear image.
+
+---
+
+## P5/P6 Web Stack — Dev Loop (No Hardware Required)
+
+Four levels, fastest to most realistic:
+
+| Level | Command | What it proves |
+|-------|---------|----------------|
+| **1 — Node mock** | `cd web && node mock_backend.js --port 3000` | Full SPA live in browser; Cd/Pb/Cu Gaussian peaks stream over real WS binary protocol |
+| **2 — Playwright** | `cd web && npm install && npm test` | 24 automated E2E tests — WS connect, form validation, binary frames, scan complete, CSV export, abort, resync, reference import |
+| **3 — pytest** | `pytest test/test_p5_protocol.py -v -k "not device"` | Wire-protocol unit tests (frame encoding, JSON schema, CSV format) — no browser |
+| **4 — Wokwi** | `idf.py uf2` → upload to wokwi.com | Real compiled firmware in browser; `FLASH_IN_PROJECT` ensures LittleFS SPA is bundled in `build/uf2.bin` — **deferred until after P7** |
+
+Build the SPA (`npm run build`) before running the mock server or Playwright tests — the mock serves from `web/dist/`.
+
+See **[`Dev-Env.md`](Dev-Env.md)** for the complete walkthrough.
 
 ---
 

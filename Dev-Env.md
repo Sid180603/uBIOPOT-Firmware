@@ -26,7 +26,7 @@ Then open `http://localhost:3000` in your browser on Windows. You'll see the rea
 
 ## Level 2 — Playwright E2E Tests (automated, headless)
 
-18 automated tests that verify specific behaviours without you clicking anything:
+24 automated tests that verify specific behaviours without you clicking anything:
 
 ```bash
 cd '/c/Users/z00541ce/Documents/Coding/ST Thesis/uBIOPOT-Firmware/web'

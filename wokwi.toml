@@ -17,10 +17,12 @@ version  = 1
 firmware = 'build/flasher_args.json'
 elf      = 'build/aquahmet.elf'
 
-# RFC2217 serial forwarding (VS Code only — lets you connect a Python client to the sim UART).
-# After starting the simulator, connect with:
-#   python tools/serial_client.py --port rfc2217://localhost:4000 --start --electrode 3
-rfc2217ServerPort = 4000
+# NOTE: rfc2217ServerPort is intentionally NOT set here.
+# In CI (wokwi-cli), enabling the RFC2217 server routes the ESP32 UART0 stream
+# to the TCP socket instead of wokwi-cli's stdout, so `expect_text` never sees
+# the serial output.  For interactive VS Code serial forwarding, add locally:
+#   rfc2217ServerPort = 4000
+# then connect via: python tools/serial_client.py --port rfc2217://localhost:4000
 
 # Custom chips
 # ------------

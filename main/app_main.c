@@ -18,6 +18,15 @@ static pstat_calib_t s_cal = PSTAT_CALIB_DEFAULT;
 
 void app_main(void)
 {
+    /* Early boot banner via printf() → UART0 console.
+     * Emitted before ANY subsystem init and independent of the ESP log level
+     * (which sdkconfig ships at WARN, compiling out ESP_LOGI).  Gives a
+     * deterministic, early serial marker for the Wokwi L7 CI simulation, which
+     * verifies the real firmware boots and runs on the ESP32 with the custom
+     * MCP4921 + ADS1115 chips.  Harmless single line in production. */
+    printf("\n{\"t\":\"boot\",\"fw\":\"1.0.0\",\"dev\":\"Aqua-HMET\"}\n");
+    fflush(stdout);
+
     ESP_LOGI(TAG, "Aqua-HMET v1 starting");
 
     /* ---- P2: register DPV technique (and stubs for CV/LSV/SWV/NPV) ---- */

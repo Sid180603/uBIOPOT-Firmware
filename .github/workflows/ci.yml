@@ -280,15 +280,15 @@ jobs:
           echo "=== Custom chips compiled successfully ==="
           ls -lh chips/*.wasm
 
-      - name: Run Wokwi simulation — expect serial hello handshake
+      - name: Run Wokwi simulation — expect firmware boot banner
         if: env.SKIP_WOKWI != 'true'
         uses: wokwi/wokwi-ci-action@v1
         with:
           token: ${{ secrets.WOKWI_CLI_TOKEN }}
           path: .
-          timeout: 120000
-          expect_text: '"t":"hello"'
-          fail_text: '"t":"error"'
+          timeout: 60000
+          expect_text: '"t":"boot"'
+          fail_text: 'Guru Meditation'
           serial_log_file: wokwi-serial.log
 
       - name: Upload Wokwi serial log

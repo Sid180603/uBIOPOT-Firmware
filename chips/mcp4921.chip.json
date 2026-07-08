@@ -1,14 +1,5 @@
 {
   "name": "MCP4921",
   "author": "Aqua-HMET / Siddharth S",
-  "pins": [
-    { "name": "VDD",  "description": "Power supply (3.3 V)" },
-    { "name": "CS",   "description": "SPI Chip Select (active-low)" },
-    { "name": "SCK",  "description": "SPI Clock" },
-    { "name": "SDI",  "description": "SPI Data In (MOSI)" },
-    { "name": "LDAC", "description": "Latch DAC output (tie to GND for immediate update)" },
-    { "name": "VOUT", "description": "DAC analog output voltage (0 … VREF)" },
-    { "name": "VREF", "description": "DAC voltage reference input" },
-    { "name": "GND",  "description": "Ground" }
-  ]
+  "pins": ["VDD", "CS", "SCK", "SDI", "LDAC", "VOUT", "VREF", "GND"]
 }

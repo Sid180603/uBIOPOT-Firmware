@@ -1,14 +1,5 @@
 {
   "name": "ADS1115",
   "author": "Aqua-HMET / Siddharth S",
-  "pins": [
-    { "name": "VDD",  "description": "Power supply (3.3 V)" },
-    { "name": "GND",  "description": "Ground" },
-    { "name": "SCL",  "description": "I2C clock" },
-    { "name": "SDA",  "description": "I2C data" },
-    { "name": "ADDR", "description": "Address select pin (GND → 0x48)" },
-    { "name": "ALRT", "description": "Alert/ready output (not used in Aqua-HMET)" },
-    { "name": "AIN0", "description": "Analog input 0 — VOUT_UC (cell voltage), also used as DAC_OUT proxy" },
-    { "name": "AIN1", "description": "Analog input 1 — IOUT_UC (current via TIA); drives synthetic DPV model" }
-  ]
+  "pins": ["VDD", "GND", "SCL", "SDA", "ADDR", "ALRT", "AIN0", "AIN1"]
 }

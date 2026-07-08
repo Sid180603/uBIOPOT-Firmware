@@ -3,7 +3,7 @@
   "author": "Siddharth S - Aqua-HMET P7/L7 Wokwi simulation",
   "editor": "wokwi",
   "parts": [
-    { "type": "wokwi-esp32-devkit-v1", "id": "esp",       "top":   0, "left":   0, "attrs": {} },
+    { "type": "board-esp32-devkit-c-v4", "id": "esp",       "top":   0, "left":   0, "attrs": {} },
     { "type": "wokwi-ili9341",         "id": "ili",       "top": -10, "left": 340, "attrs": {} },
     { "type": "chip-mcp4921",          "id": "mcp",       "top": 200, "left": 340, "attrs": {} },
     { "type": "chip-ads1115",          "id": "ads",       "top": 310, "left": 340, "attrs": {} },

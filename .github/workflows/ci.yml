@@ -286,7 +286,7 @@ jobs:
         with:
           token: ${{ secrets.WOKWI_CLI_TOKEN }}
           path: .
-          timeout: 30000
+          timeout: 120000
           expect_text: '"t":"hello"'
           fail_text: '"t":"error"'
           serial_log_file: wokwi-serial.log

@@ -204,8 +204,14 @@ function serveFile(distDir, urlPath, res) {
   const safe = path.normalize(urlPath).replace(/^(\.\.[\\/])+/, '');
   let   file = path.join(distDir, safe);
 
-  // Default to index.html
-  if (safe === '/' || safe === '') file = path.join(distDir, 'index.html');
+  // Default to index.html — handle both Unix '/' and Windows '\\' normalised forms
+  if (safe === '/' || safe === '\\' || safe === '' || safe === '.') file = path.join(distDir, 'index.html');
+
+  // Also guard against a directory being resolved (e.g. trailing slash on sub-path)
+  if (fs.existsSync(file) && fs.statSync(file).isDirectory()) {
+    file = path.join(file, 'index.html');
+    if (!fs.existsSync(file)) file = path.join(distDir, 'index.html');
+  }
 
   // Try .gz variant first
   const gzFile = file + '.gz';

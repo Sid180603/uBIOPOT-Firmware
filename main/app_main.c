@@ -59,12 +59,21 @@ void app_main(void)
     }
 
     /*
-     * Remaining startup (filled in phase by phase):
-     * P8: settings_load(&s_cal) -- load calibration + WiFi creds from NVS
-     * P4: ui_tft_start()        -- init ILI9341 + LVGL + 2-button encoder nav  ← DONE
-     * P5: net_comms_start()     -- WiFi APSTA + captive portal + mDNS + HTTP + WebSocket ← DONE
-     * P7: serial_comms_start()  -- UART0 NDJSON sink + RX command task
+     * Startup order (deliberate):
+     * 1. serial_comms_start() FIRST — UART0 hello sent before any expensive init.
+     *    Wokwi CI test expects "t":"hello" immediately after core engine init.
+     *    Also useful for real-device bring-up: serial works even if TFT/WiFi fails.
+     * 2. ui_tft_start()    — ILI9341 + LVGL (expensive, may block ~seconds)
+     * 3. nvs_flash_init()  — required by WiFi PHY calibration
+     * 4. net_comms_start() — WiFi stack (expensive, PHY cal + SoftAP start)
      */
+
+    /* ---- P7: UART0 NDJSON serial protocol — start EARLY before TFT/WiFi ---- */
+    ret = serial_comms_start();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "serial_comms_start FAILED: %s", esp_err_to_name(ret));
+        /* Non-fatal: WiFi and TFT UIs still work */
+    }
 
     /* ---- P4: on-device TFT UI (ILI9341 + LVGL + encoder + engine sink) ---- */
     ret = ui_tft_start();
@@ -89,13 +98,6 @@ void app_main(void)
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "net_comms_start FAILED: %s -- WiFi unavailable", esp_err_to_name(ret));
         /* Non-fatal: TFT UI and serial (P7) still work */
-    }
-
-    /* ---- P7: UART0 NDJSON serial protocol (RX task + engine sink) ---- */
-    ret = serial_comms_start();
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "serial_comms_start FAILED: %s", esp_err_to_name(ret));
-        /* Non-fatal: WiFi and TFT UIs still work */
     }
 
     for (;;) {

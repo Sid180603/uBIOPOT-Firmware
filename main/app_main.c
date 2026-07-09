@@ -10,6 +10,7 @@
 #include "ui_tft.h"
 #include "net_comms.h"
 #include "serial_comms.h"
+#include "serial_comms_protocol.h"
 
 static const char *TAG = "aqua-hmet";
 
@@ -24,7 +25,7 @@ void app_main(void)
      * deterministic, early serial marker for the Wokwi L7 CI simulation, which
      * verifies the real firmware boots and runs on the ESP32 with the custom
      * MCP4921 + ADS1115 chips.  Harmless single line in production. */
-    printf("\n{\"t\":\"boot\",\"fw\":\"1.0.0\",\"dev\":\"Aqua-HMET\"}\n");
+    printf("\n{\"t\":\"boot\",\"fw\":\"" SERIAL_FW_VERSION_STR "\",\"dev\":\"" SERIAL_DEVICE_NAME "\"}\n");
     fflush(stdout);
 
     ESP_LOGI(TAG, "Aqua-HMET v1 starting");

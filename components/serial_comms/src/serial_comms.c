@@ -364,6 +364,7 @@ esp_err_t serial_comms_start(void)
     s_tx_mutex = xSemaphoreCreateMutex();
     if (!s_tx_mutex) {
         ESP_LOGE(TAG, "Failed to create TX mutex");
+        esp_log_level_set("*", ESP_LOG_INFO);
         return ESP_ERR_NO_MEM;
     }
 
@@ -404,6 +405,7 @@ esp_err_t serial_comms_start(void)
     );
     if (ok != pdPASS) {
         ESP_LOGE(TAG, "Failed to create serial_rx task");
+        esp_log_level_set("*", ESP_LOG_INFO);
         return ESP_ERR_NO_MEM;
     }
 

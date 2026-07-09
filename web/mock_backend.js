@@ -153,7 +153,8 @@ class MockServer {
             break;
           }
           const p   = cmd.params || {};
-          const elec = parseInt(cmd.electrode, 10) || 1;
+          const elecParsed = parseInt(cmd.electrode, 10);
+          const elec = isNaN(elecParsed) ? 1 : elecParsed;
           this.startScan(
             elec,
             parseFloat(p.e_begin_mV) || -900,
@@ -208,10 +209,12 @@ function serveFile(distDir, urlPath, res) {
   if (safe === '/' || safe === '\\' || safe === '' || safe === '.') file = path.join(distDir, 'index.html');
 
   // Also guard against a directory being resolved (e.g. trailing slash on sub-path)
-  if (fs.existsSync(file) && fs.statSync(file).isDirectory()) {
-    file = path.join(file, 'index.html');
-    if (!fs.existsSync(file)) file = path.join(distDir, 'index.html');
-  }
+  try {
+    if (fs.statSync(file).isDirectory()) {
+      file = path.join(file, 'index.html');
+      if (!fs.existsSync(file)) file = path.join(distDir, 'index.html');
+    }
+  } catch (_) { /* file doesn't exist — let the 404 path below handle it */ }
 
   // Try .gz variant first
   const gzFile = file + '.gz';

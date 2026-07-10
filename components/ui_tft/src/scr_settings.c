@@ -20,6 +20,12 @@ static lv_obj_t *s_lbl_ip     = NULL;
 static lv_obj_t *s_lbl_url    = NULL;
 static lv_group_t *s_grp      = NULL;
 
+/* WiFi info cache — persists across lazy create so the settings screen shows
+ * correct values even when it is first opened after WiFi has already come up. */
+static char s_cache_ssid[64] = {0};
+static char s_cache_ip[32]   = {0};
+static char s_cache_url[64]  = {0};
+
 /* -------------------------------------------------------------------------
  * Helpers
  * ------------------------------------------------------------------------- */
@@ -187,10 +193,10 @@ lv_obj_t *scr_settings_create(lv_group_t *group)
     lv_obj_set_style_text_font(back_lbl, &lv_font_montserrat_14, 0);
     lv_obj_center(back_lbl);
 
-    /* Default values (stub) */
-    lv_label_set_text(s_lbl_ssid, "Not configured");
-    lv_label_set_text(s_lbl_ip,   "---");
-    lv_label_set_text(s_lbl_url,  "---");
+    /* Apply cached WiFi info if available; fall back to stub text. */
+    lv_label_set_text(s_lbl_ssid, s_cache_ssid[0] ? s_cache_ssid : "Not configured");
+    lv_label_set_text(s_lbl_ip,   s_cache_ip[0]   ? s_cache_ip   : "---");
+    lv_label_set_text(s_lbl_url,  s_cache_url[0]  ? s_cache_url  : "---");
 
     ESP_LOGI(TAG, "Settings screen created");
     return s_scr;
@@ -202,6 +208,12 @@ lv_obj_t *scr_settings_create(lv_group_t *group)
 
 void scr_settings_set_wifi(const char *ssid, const char *ip, const char *url)
 {
+    /* Always update the cache so scr_settings_create() can apply it later
+     * even if the settings screen hasn't been created yet (lazy screens). */
+    if (ssid) strlcpy(s_cache_ssid, ssid, sizeof(s_cache_ssid));
+    if (ip)   strlcpy(s_cache_ip,   ip,   sizeof(s_cache_ip));
+    if (url)  strlcpy(s_cache_url,  url,  sizeof(s_cache_url));
+    /* If the screen already exists, update it live. */
     if (!s_scr) return;
     if (ssid) lv_label_set_text(s_lbl_ssid, ssid);
     if (ip)   lv_label_set_text(s_lbl_ip,   ip);

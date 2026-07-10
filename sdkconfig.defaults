@@ -53,3 +53,32 @@ CONFIG_LV_USE_CLIB_SPRINTF=y
 # Color depth: 16-bit RGB565 to match ILI9341 panel.
 # This is the Kconfig default but stated explicitly for clarity.
 CONFIG_LV_COLOR_DEPTH_16=y
+
+# ---- WiFi memory reduction (P5+) ----
+# Default static RX buffer count is 10 (16 KB). Reduced to 4 to free ~10 KB of
+# contiguous DRAM for LVGL. SoftAP-only, low-throughput use: 4 buffers is sufficient.
+CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=4
+# Dynamic RX/TX: reduce from 32 to 16 — halves peak dynamic buffer pool.
+CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=16
+CONFIG_ESP_WIFI_DYNAMIC_TX_BUFFER_NUM=16
+# Disable AMPDU aggregation — throughput optimisation not needed for potentiostat SoftAP.
+# Saves additional internal driver state (~4 KB).
+CONFIG_ESP_WIFI_AMPDU_TX_ENABLED=n
+CONFIG_ESP_WIFI_AMPDU_RX_ENABLED=n
+
+# ---- LwIP socket pool ----
+# Default LWIP_MAX_SOCKETS=10. httpd needs max_open_sockets(9) + 3 internal = 12 > 10 → fail.
+# Raise to 16 to give headroom for WiFi DHCP/DNS + httpd + WebSocket clients.
+CONFIG_LWIP_MAX_SOCKETS=16
+
+# ---- LwIP: disable IPv6 ----
+# All SoftAP services (HTTP, WebSocket, mDNS, DHCP, captive DNS) are IPv4-only.
+# IPv6 allocates ND6 neighbor/prefix/router/destination tables + 3 addresses per
+# interface at init time (~15-20 KB heap). Disabling it reclaims that heap for LVGL.
+CONFIG_LWIP_IPV6=n
+
+# ---- Task WDT timeout ----
+# Default is 5 s. LVGL screen_mgr_init (5 screens + 3 fonts) runs on the main task
+# without yielding and can take >5 s when heap is fragmented after WiFi init.
+# Raised to 10 s to prevent spurious WDT resets during startup.
+CONFIG_ESP_TASK_WDT_TIMEOUT_S=10

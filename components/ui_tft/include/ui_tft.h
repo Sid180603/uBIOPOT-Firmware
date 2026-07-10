@@ -50,6 +50,28 @@ extern "C" {
 esp_err_t ui_tft_start(void);
 
 /**
+ * @brief  Screen selector for ui_tft_request_nav().
+ */
+typedef enum {
+    UI_SCREEN_HOME     = 0,
+    UI_SCREEN_SCAN     = 1,
+    UI_SCREEN_RESULTS  = 2,
+    UI_SCREEN_SETTINGS = 3,
+} ui_screen_t;
+
+/**
+ * @brief  Thread-safe TFT navigation — call from any task.
+ *
+ * Acquires lvgl_port_lock internally before calling the matching
+ * screen_mgr_goto_*() function, then releases it.  Safe to call from
+ * the httpd task, serial_rx_task, or any FreeRTOS task context.
+ *
+ * Returns ESP_ERR_INVALID_STATE if ui_tft_start() has not yet completed.
+ * Returns ESP_ERR_TIMEOUT if the LVGL lock could not be acquired.
+ */
+esp_err_t ui_tft_request_nav(ui_screen_t screen);
+
+/**
  * @brief  Update the WiFi information shown on the Settings screen.
  *
  * Called by net_comms (P5) once WiFi is configured.

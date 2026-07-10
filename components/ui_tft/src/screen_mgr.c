@@ -12,6 +12,8 @@
 #include "lvgl.h"
 #include "esp_lvgl_port.h"
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include <string.h>
 
 static const char *TAG = "screen_mgr";
@@ -60,25 +62,32 @@ void screen_mgr_init(lv_display_t *disp, lv_indev_t *indev)
     s_disp  = disp;
     s_indev = indev;
 
-    /* Create one group per screen so encoder focus stays on visible objects. */
+    /* Create one group per screen up-front (groups are lightweight — just a
+     * linked list; screens are heavy — widgets + styles + chart buffers). */
     s_grp_splash   = lv_group_create();
     s_grp_home     = lv_group_create();
     s_grp_scan     = lv_group_create();
     s_grp_results  = lv_group_create();
     s_grp_settings = lv_group_create();
 
-    /* Create all screens, each receiving its own group. */
-    s_scr_splash   = scr_splash_create(s_grp_splash);
+    /* LAZY SCREEN CREATION — only the two screens needed at boot are built
+     * here.  Scan, results, and settings are created on first navigation
+     * (in screen_mgr_goto_*).  This halves peak widget-heap at startup:
+     * only splash + home exist simultaneously during the WiFi bring-up
+     * window, leaving ~30-60 KB more for LwIP, httpd, and mDNS. */
+    s_scr_splash   = scr_splash_create(s_grp_splash);   vTaskDelay(1);
     s_scr_home     = scr_home_create(s_grp_home);
-    s_scr_scan     = scr_scan_create(s_grp_scan);
-    s_scr_results  = scr_results_create(s_grp_results);
-    s_scr_settings = scr_settings_create(s_grp_settings);
+
+    /* Scan / results / settings start as NULL — goto_* creates them lazily. */
+    s_scr_scan     = NULL;
+    s_scr_results  = NULL;
+    s_scr_settings = NULL;
 
     /* Start on splash; bind indev to splash group initially. */
     lv_indev_set_group(s_indev, s_grp_splash);
     lv_disp_load_scr(s_scr_splash);
 
-    ESP_LOGI(TAG, "All screens created, splash loaded");
+    ESP_LOGI(TAG, "Splash + Home created, deferred Scan/Results/Settings");
 }
 
 /* -------------------------------------------------------------------------
@@ -123,16 +132,19 @@ void screen_mgr_goto_home(void)
 
 void screen_mgr_goto_scan(void)
 {
+    if (!s_scr_scan) { s_scr_scan = scr_scan_create(s_grp_scan); }
     load_screen(s_scr_scan, LV_SCR_LOAD_ANIM_MOVE_LEFT);
 }
 
 void screen_mgr_goto_results(void)
 {
+    if (!s_scr_results) { s_scr_results = scr_results_create(s_grp_results); }
     load_screen(s_scr_results, LV_SCR_LOAD_ANIM_MOVE_LEFT);
 }
 
 void screen_mgr_goto_settings(void)
 {
+    if (!s_scr_settings) { s_scr_settings = scr_settings_create(s_grp_settings); }
     load_screen(s_scr_settings, LV_SCR_LOAD_ANIM_OVER_LEFT);
 }
 

@@ -96,9 +96,12 @@ static void synthetic_scan_cb(lv_timer_t *t)
         static peak_t peaks[4];
         uint16_t n_pk = peaks_find(s_I_buf, s_E_buf, (uint16_t)s_total_steps,
                                    peaks, 4, 5.0f /* µA prominence */);
+        /* Navigate FIRST so the results screen is created (lazy) before
+         * the setters write into it — mirrors the SCAN_EVT_SCAN_DONE fix
+         * in ui_tft.c (Bug A parity for the PC simulator). */
+        screen_mgr_goto_results();
         scr_results_set(peaks, n_pk, /*electrode=*/1);
         scr_results_set_curve(s_E_buf, s_I_buf, (uint16_t)s_total_steps);
-        screen_mgr_goto_results();
         return;
     }
 

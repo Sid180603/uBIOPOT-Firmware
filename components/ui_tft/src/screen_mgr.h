@@ -37,8 +37,12 @@ extern "C" {
 #define UI_COLOR_BORDER    0x2D2D4EU  /* subtle border / divider               */
 #define UI_COLOR_FOCUS     0x1A6E8EU  /* darker teal — focused item bg         */
 
-/* DPV scan chart: maximum points from engine (1 electrode) = 401; all-3 = 1203 */
-#define UI_CHART_MAX_PTS   1300
+/* DPV scan chart: display resolution is 320 px wide; 320 points = 1 point per pixel.
+ * Pre-allocating 1300 (= ENGINE_SCAN_BUF_MAX) wastes 23 KB of heap at init and causes
+ * lv_malloc OOM after WiFi has already claimed its buffers.  The chart rolls (oldest
+ * point discarded) when the scan exceeds 320 steps; peak detection is unaffected
+ * (uses separate static s_E_buf/s_I_buf buffers in ui_tft.c, not the LVGL chart). */
+#define UI_CHART_MAX_PTS   320
 
 /* Ring buffer for batching incoming DataPoints before LVGL frame flush */
 #define UI_RING_BUF_SIZE   64

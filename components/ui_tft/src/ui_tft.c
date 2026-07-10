@@ -57,11 +57,13 @@ static const char *TAG = "ui_tft";
 #define TFT_V_RES  240
 
 /*
- * DMA line-buffer height: 40 lines × 320 px × 2 bytes = 25,600 bytes per buffer.
- * Two buffers (double-buffered) = 51,200 bytes total (DMA-capable SRAM).
- * This avoids the 150 KB full-framebuffer approach.
+ * DMA line-buffer height: 20 lines × 320 px × 2 bytes = 12,800 bytes.
+ * Single-buffered (partial rendering, no animation overlap needed for a
+ * low-fps settings/voltammogram UI). Saves ~38 KB of DMA-capable SRAM vs
+ * the original 40-line double-buffer (51,200 bytes total), freeing it for
+ * LVGL widget allocation on the same PSRAM-less WROOM-32.
  */
-#define TFT_BUF_LINES 40
+#define TFT_BUF_LINES 20
 #define TFT_BUF_SIZE  (TFT_H_RES * TFT_BUF_LINES)
 
 /* =========================================================================
@@ -71,6 +73,19 @@ static const char *TAG = "ui_tft";
 static lv_indev_t        *s_indev    = NULL;
 static volatile int32_t   s_enc_diff = 0;    /* NAV press count since last read */
 static volatile bool      s_btn_enter = false; /* START held down */
+
+/* =========================================================================
+ * TFT readiness flag + buffered WiFi info
+ *
+ * net_comms calls ui_tft_set_wifi_info() as soon as the SoftAP comes up,
+ * which may be BEFORE lvgl_port_init() has run (depends on startup order).
+ * We store the info here and apply it at the end of ui_tft_start().
+ * ========================================================================= */
+static atomic_bool s_tft_ready        = false;
+static char        s_pending_ssid[64] = {0};
+static char        s_pending_ip[32]   = {0};
+static char        s_pending_url[64]  = {0};
+static bool        s_wifi_info_pending = false;
 
 static void encoder_read_cb(lv_indev_t *indev, lv_indev_data_t *data)
 {
@@ -184,10 +199,13 @@ static void sink_on_event(scan_event_t evt, const char *info, void *ctx)
             /* Detect peaks from collected data */
             s_n_peaks = peaks_find(s_I_buf, s_E_buf, s_pt_count,
                                    s_peaks, MAX_PEAKS, 1.0f /* µA prominence */);
+            /* Navigate first so the results screen is created (lazy) before
+             * scr_results_set / scr_results_set_curve write into it.
+             * Reversed order would silently drop data on the first scan. */
+            screen_mgr_goto_results();
             scr_results_set(s_peaks, s_n_peaks, s_electrode);
             /* Pass raw curve for mini voltammogram (#12) */
             scr_results_set_curve(s_E_buf, s_I_buf, s_pt_count);
-            screen_mgr_goto_results();
             scr_home_set_state(SCAN_STATE_IDLE);
             pstat_led_set(PSTAT_LED_READY,      true);
             pstat_led_set(PSTAT_LED_PROCESSING, false);
@@ -364,7 +382,7 @@ esp_err_t ui_tft_start(void)
         .io_handle     = io_handle,
         .panel_handle  = panel_handle,
         .buffer_size   = TFT_BUF_SIZE,
-        .double_buffer = true,
+        .double_buffer = false,
         .hres          = TFT_H_RES,
         .vres          = TFT_V_RES,
         .monochrome    = false,
@@ -433,6 +451,16 @@ esp_err_t ui_tft_start(void)
     pstat_led_set(PSTAT_LED_READY,      true);
     pstat_led_set(PSTAT_LED_PROCESSING, false);
 
+    /* Mark LVGL as ready, then flush any WiFi info that arrived early */
+    atomic_store(&s_tft_ready, true);
+    if (s_wifi_info_pending) {
+        if (lvgl_port_lock(0)) {
+            scr_settings_set_wifi(s_pending_ssid, s_pending_ip, s_pending_url);
+            lvgl_port_unlock();
+        }
+        s_wifi_info_pending = false;
+    }
+
     ESP_LOGI(TAG, "ui_tft_start complete — Splash screen active");
     return ESP_OK;
 }
@@ -443,8 +471,33 @@ esp_err_t ui_tft_start(void)
 
 void ui_tft_set_wifi_info(const char *ssid, const char *ip, const char *url)
 {
+    if (!atomic_load(&s_tft_ready)) {
+        /* LVGL not initialised yet — buffer the info for ui_tft_start() to apply */
+        if (ssid) strlcpy(s_pending_ssid, ssid, sizeof(s_pending_ssid));
+        if (ip)   strlcpy(s_pending_ip,   ip,   sizeof(s_pending_ip));
+        if (url)  strlcpy(s_pending_url,  url,  sizeof(s_pending_url));
+        s_wifi_info_pending = true;
+        return;
+    }
     if (!lvgl_port_lock(0)) return;
     scr_settings_set_wifi(ssid, ip, url);
     lvgl_port_unlock();
+}
+
+esp_err_t ui_tft_request_nav(ui_screen_t screen)
+{
+    if (!atomic_load(&s_tft_ready)) return ESP_ERR_INVALID_STATE;
+    if (!lvgl_port_lock(0)) return ESP_ERR_TIMEOUT;
+    switch (screen) {
+        case UI_SCREEN_HOME:     screen_mgr_goto_home();     break;
+        case UI_SCREEN_SCAN:     screen_mgr_goto_scan();     break;
+        case UI_SCREEN_RESULTS:  screen_mgr_goto_results();  break;
+        case UI_SCREEN_SETTINGS: screen_mgr_goto_settings(); break;
+        default:
+            lvgl_port_unlock();
+            return ESP_ERR_INVALID_ARG;
+    }
+    lvgl_port_unlock();
+    return ESP_OK;
 }
 

@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include "esp_log.h"
+#include "esp_heap_caps.h"
 #include "nvs_flash.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -73,9 +74,13 @@ void app_main(void)
      * 1. serial_comms_start() FIRST — UART0 hello sent before any expensive init.
      *    Wokwi CI test expects "t":"hello" immediately after core engine init.
      *    Also useful for real-device bring-up: serial works even if TFT/WiFi fails.
-     * 2. ui_tft_start()    — ILI9341 + LVGL (expensive, may block ~seconds)
-     * 3. nvs_flash_init()  — required by WiFi PHY calibration
-     * 4. net_comms_start() — WiFi stack (expensive, PHY cal + SoftAP start)
+     * 2. nvs_flash_init()  — required by WiFi PHY calibration; done before WiFi.
+     * 3. net_comms_start() — WiFi stack BEFORE TFT: WiFi needs ~25 KB of contiguous
+     *    DRAM for static RX buffers. LVGL (step 4) fragments the heap with many small
+     *    font/screen allocations, making contiguous blocks unavailable afterwards.
+     *    Starting WiFi first guarantees its buffers are allocated from unfragmented heap.
+     * 4. ui_tft_start()    — ILI9341 + LVGL (expensive, may block ~seconds); uses
+     *    whatever heap remains after WiFi — heap is large enough for both.
      */
 
     /* ---- P7: UART0 NDJSON serial protocol — start EARLY before TFT/WiFi ---- */
@@ -83,13 +88,6 @@ void app_main(void)
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "serial_comms_start FAILED: %s", esp_err_to_name(ret));
         /* Non-fatal: WiFi and TFT UIs still work */
-    }
-
-    /* ---- P4: on-device TFT UI (ILI9341 + LVGL + encoder + engine sink) ---- */
-    ret = ui_tft_start();
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "ui_tft_start FAILED: %s -- display will be blank", esp_err_to_name(ret));
-        /* Non-fatal: device still runs scans via serial/WiFi (P5/P7) */
     }
 
     /* ---- NVS (required by WiFi for PHY calibration + credential storage) ---- */
@@ -104,11 +102,27 @@ void app_main(void)
     }
 
     /* ---- P5: WiFi APSTA + captive portal + mDNS + HTTP + WebSocket ---- */
+    ESP_LOGE(TAG, "HEAP before net_comms: %u free / %u largest-DMA-block",
+             (unsigned)esp_get_free_heap_size(),
+             (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL));
     ret = net_comms_start();
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "net_comms_start FAILED: %s -- WiFi unavailable", esp_err_to_name(ret));
         /* Non-fatal: TFT UI and serial (P7) still work */
     }
+
+    /* ---- P4: on-device TFT UI (ILI9341 + LVGL + encoder + engine sink) ---- */
+    ESP_LOGE(TAG, "HEAP before ui_tft:   %u free / %u largest-DMA-block",
+             (unsigned)esp_get_free_heap_size(),
+             (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL));
+    ret = ui_tft_start();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "ui_tft_start FAILED: %s -- display will be blank", esp_err_to_name(ret));
+        /* Non-fatal: device still runs scans via serial/WiFi (P5/P7) */
+    }
+    ESP_LOGE(TAG, "HEAP after  ui_tft:   %u free / %u largest-DMA-block",
+             (unsigned)esp_get_free_heap_size(),
+             (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL));
 
     for (;;) {
         vTaskDelay(pdMS_TO_TICKS(1000));

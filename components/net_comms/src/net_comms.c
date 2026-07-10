@@ -703,6 +703,54 @@ static esp_err_t api_wifi_handler(httpd_req_t *req)
 }
 
 /* --------------------------------------------------------------------------
+ * TFT navigation API — POST /api/nav
+ * Body: {"screen":"home"|"scan"|"results"|"settings"}
+ * Drives the physical TFT to any screen from the browser or curl.
+ * Useful when physical buttons are absent/dead (e.g. demo unit).
+ * Calls ui_tft_request_nav() which acquires lvgl_port_lock internally.
+ * -------------------------------------------------------------------------- */
+
+static esp_err_t api_nav_handler(httpd_req_t *req)
+{
+    char body[64] = {0};
+    int len = MIN((int)req->content_len, (int)sizeof(body) - 1);
+    if (len > 0 && httpd_req_recv(req, body, len) <= 0) {
+        httpd_resp_send_408(req);
+        return ESP_OK;
+    }
+    body[len] = '\0';
+
+    cJSON *j = cJSON_ParseWithLength(body, strlen(body));
+    if (!j) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Bad JSON");
+        return ESP_OK;
+    }
+
+    const char *scr = cJSON_GetStringValue(cJSON_GetObjectItem(j, "screen"));
+    ui_screen_t target;
+    if      (scr && strcmp(scr, "home")     == 0) target = UI_SCREEN_HOME;
+    else if (scr && strcmp(scr, "scan")     == 0) target = UI_SCREEN_SCAN;
+    else if (scr && strcmp(scr, "results")  == 0) target = UI_SCREEN_RESULTS;
+    else if (scr && strcmp(scr, "settings") == 0) target = UI_SCREEN_SETTINGS;
+    else {
+        cJSON_Delete(j);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST,
+                            "Unknown screen: home|scan|results|settings");
+        return ESP_OK;
+    }
+    cJSON_Delete(j);
+
+    esp_err_t err = ui_tft_request_nav(target);
+    httpd_resp_set_type(req, HTTPD_TYPE_JSON);
+    if (err == ESP_OK) {
+        httpd_resp_sendstr(req, "{\"ok\":true}");
+    } else {
+        httpd_resp_sendstr(req, "{\"ok\":false,\"err\":\"TFT not ready\"}");
+    }
+    return ESP_OK;
+}
+
+/* --------------------------------------------------------------------------
  * Static file server (LittleFS assets for P6 SPA)
  *
  * ends_with(), net_content_type(), net_path_is_traversal() all come from
@@ -872,6 +920,11 @@ static esp_err_t start_http_server(void)
     httpd_register_uri_handler(s_server, &csv_uri);
     httpd_register_uri_handler(s_server, &ref_uri);
     httpd_register_uri_handler(s_server, &wifi_uri);
+
+    /* --- TFT nav: POST /api/nav {"screen":"home"|"scan"|"results"|"settings"} --- */
+    static const httpd_uri_t nav_uri = {
+        .uri = "/api/nav", .method = HTTP_POST, .handler = api_nav_handler };
+    httpd_register_uri_handler(s_server, &nav_uri);
 
     /* --- Captive portal probes --- */
     static const httpd_uri_t gen204 = {

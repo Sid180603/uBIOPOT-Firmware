@@ -8,6 +8,7 @@ idf_component_register(
     REQUIRES
         echem_core
         acq_engine
+        ui_tft
         esp_driver_uart
         json
         freertos

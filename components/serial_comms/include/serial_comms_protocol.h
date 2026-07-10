@@ -104,6 +104,7 @@ extern "C" {
 #define SERIAL_CMD_ZERO    "zero"
 #define SERIAL_CMD_STATE   "state"
 #define SERIAL_CMD_HELLO   "hello"
+#define SERIAL_CMD_NAV     "nav"    /* drive the TFT: {"cmd":"nav","screen":"settings"} */
 
 /* --------------------------------------------------------------------------
  * DPV parameter keys (inside "params":{} of the start command)

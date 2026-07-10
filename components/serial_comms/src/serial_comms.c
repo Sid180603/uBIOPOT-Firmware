@@ -27,6 +27,7 @@
 #include "acq_engine.h"
 #include "echem_core/scan_state.h"
 #include "echem_core/dpv.h"
+#include "ui_tft.h"
 
 #include "driver/uart.h"
 #include "esp_log.h"
@@ -235,6 +236,20 @@ static void serial_process_cmd(const char *line, int len)
                 if (s) { serial_tx_line(s); free(s); }
             }
         }
+
+    } else if (strcmp(cmd, SERIAL_CMD_NAV) == 0) {
+        /* Drive the physical TFT to a screen. ui_tft_request_nav() acquires
+         * lvgl_port_lock internally, so this is safe from the RX task. */
+        const char *scr = cJSON_GetStringValue(cJSON_GetObjectItem(j, "screen"));
+        ui_screen_t target;
+        bool ok = true;
+        if      (scr && strcmp(scr, "home")     == 0) target = UI_SCREEN_HOME;
+        else if (scr && strcmp(scr, "scan")     == 0) target = UI_SCREEN_SCAN;
+        else if (scr && strcmp(scr, "results")  == 0) target = UI_SCREEN_RESULTS;
+        else if (scr && strcmp(scr, "settings") == 0) target = UI_SCREEN_SETTINGS;
+        else ok = false;
+        if (ok) ui_tft_request_nav(target);
+        else    ESP_LOGW(TAG, "RX: nav unknown screen");
 
     } else {
         ESP_LOGW(TAG, "RX: unknown cmd '%s'", cmd);

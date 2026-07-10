@@ -525,6 +525,24 @@ $btnClearRef.addEventListener('click', () => {
 document.getElementById('xaxis-cmd').addEventListener('click', () => setXAxis('cmd'));
 document.getElementById('xaxis-re').addEventListener('click',  () => setXAxis('re'));
 
+// =============================================================================
+// Remote TFT navigation (POST /api/nav) — drives the on-device screen
+// =============================================================================
+document.querySelectorAll('#nav-btn-row [data-nav]').forEach((b) => {
+  b.addEventListener('click', () => {
+    const screen = b.getAttribute('data-nav');
+    fetch('/api/nav', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ screen }),
+    })
+      .then((r) => (r.ok
+        ? showToast(`Display \u2192 ${screen}`, 'info')
+        : showToast(`Nav failed (${r.status})`, 'error')))
+      .catch(() => showToast('Nav request failed', 'error'));
+  });
+});
+
 function setXAxis(mode) {
   xAxisMode = mode;
   document.getElementById('xaxis-cmd').classList.toggle('active', mode === 'cmd');

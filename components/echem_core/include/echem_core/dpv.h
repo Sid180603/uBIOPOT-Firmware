@@ -52,7 +52,7 @@ typedef struct {
  * -------------------------------------------------------------------------- */
 
 #define DPV_PARAMS_DEFAULT {                    \
-    .e_begin_mV         = -500.0f,              \
+    .e_begin_mV         = -900.0f,              \
     .e_end_mV           =  500.0f,              \
     .e_step_mV          =    5.0f,              \
     .e_pulse_mV         =   25.0f,              \

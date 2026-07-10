@@ -21,6 +21,7 @@
 #include "screen_mgr.h"
 #include "lvgl.h"
 #include "acq_engine.h"
+#include "echem_core/dpv.h"
 #include "esp_log.h"
 #include <stdio.h>
 #include <string.h>
@@ -198,19 +199,10 @@ static void menu_item_click(lv_event_t *e)
     int idx = (int)(intptr_t)lv_event_get_user_data(e);
     switch (idx) {
         case MENU_START_DPV: {
-            /* Build default DPV params and start */
-            dpv_params_t p = {
-                .e_begin_mV         = -900.0f,
-                .e_end_mV           =  500.0f,
-                .e_step_mV          =    5.0f,
-                .e_pulse_mV         =   25.0f,
-                .t_pulse_ms         =   50,
-                .t_period_ms        =  200,
-                .t_equilibration_ms = 2000,
-                .cycles             =    1,
-                .n_avg              =    5,
-                .electrode          = (electrode_t)s_electrode,
-            };
+            /* Use the shared canonical defaults; only the electrode varies.
+             * Single source of truth = DPV_PARAMS_DEFAULT (matches web + serial). */
+            dpv_params_t p = DPV_PARAMS_DEFAULT;
+            p.electrode = (electrode_t)s_electrode;
             s_e_begin_mV = p.e_begin_mV;
             s_e_end_mV   = p.e_end_mV;
             esp_err_t ret = engine_start(s_electrode, &p);

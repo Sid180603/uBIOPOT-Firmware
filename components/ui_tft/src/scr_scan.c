@@ -74,6 +74,14 @@ static uint32_t s_elapsed_s = 0;
 static int32_t s_y_min = -100;
 static int32_t s_y_max =  100;
 
+/* Cached X (E) range from scr_scan_reset(). Applied in scr_scan_create() so the
+ * axis is correct even when reset() runs before the lazy scan screen exists
+ * (otherwise the chart keeps its default 0..point_count range and clamps the
+ * sweep to the straight/slant/straight artifact). */
+static int32_t s_cached_x_min  = 0;
+static int32_t s_cached_x_max  = 1;
+static bool    s_x_range_valid = false;
+
 /* -------------------------------------------------------------------------
  * Ring buffer API (lock-free single-producer/single-consumer)
  * ------------------------------------------------------------------------- */
@@ -138,7 +146,10 @@ static void flush_timer_cb(lv_timer_t *t)
     chart_point_t pt;
     bool updated = false;
     while (ring_pop(&pt)) {
-        /* Active series = whichever was last reset via scr_scan_reset */
+        /* Active series = whichever was last reset via scr_scan_reset.
+         * set_next_value2 appends (x=E_mV, y=I_uA) to the scatter series.
+         * scr_scan_reset() clears the series (start_point=0) and sets the X-axis
+         * range, so points land at their true horizontal position across the sweep. */
         lv_chart_series_t *ser = s_series[0];  /* single electrode default */
         lv_chart_set_next_value2(s_chart, ser, pt.E_mV, pt.I_uA);
 
@@ -272,6 +283,12 @@ lv_obj_t *scr_scan_create(lv_group_t *group)
     /* Initial Y range */
     lv_chart_set_axis_range(s_chart, LV_CHART_AXIS_PRIMARY_Y, s_y_min, s_y_max);
 
+    /* Apply cached X (E) range if scr_scan_reset() already ran before this lazy
+     * screen was created — else the chart clamps the sweep to 0..point_count. */
+    if (s_x_range_valid) {
+        lv_chart_set_axis_range(s_chart, LV_CHART_AXIS_PRIMARY_X, s_cached_x_min, s_cached_x_max);
+    }
+
     /* Electrode 1 series (teal) — primary */
     s_series[0] = lv_chart_add_series(s_chart,
                                        lv_color_hex(UI_COLOR_ACCENT),
@@ -383,6 +400,13 @@ lv_obj_t *scr_scan_create(lv_group_t *group)
 
 void scr_scan_reset(uint8_t electrode, float e_begin_mV, float e_end_mV)
 {
+    /* Cache the X (E) range up-front so scr_scan_create() can apply it even if
+     * the scan screen is created lazily AFTER this reset call. */
+    s_cached_x_min  = (int32_t)roundf(e_begin_mV < e_end_mV ? e_begin_mV : e_end_mV);
+    s_cached_x_max  = (int32_t)roundf(e_begin_mV < e_end_mV ? e_end_mV : e_begin_mV);
+    if (s_cached_x_max <= s_cached_x_min) s_cached_x_max = s_cached_x_min + 1;
+    s_x_range_valid = true;
+
     if (!s_scr) return;
 
     /* Reset ring buffer */
@@ -399,10 +423,7 @@ void scr_scan_reset(uint8_t electrode, float e_begin_mV, float e_end_mV)
     }
     if (s_chart) {
         lv_chart_set_axis_range(s_chart, LV_CHART_AXIS_PRIMARY_Y, s_y_min, s_y_max);
-        int32_t x_min = (int32_t)roundf(e_begin_mV < e_end_mV ? e_begin_mV : e_end_mV);
-        int32_t x_max = (int32_t)roundf(e_begin_mV < e_end_mV ? e_end_mV : e_begin_mV);
-        if (x_max <= x_min) x_max = x_min + 1;
-        lv_chart_set_axis_range(s_chart, LV_CHART_AXIS_PRIMARY_X, x_min, x_max);
+        lv_chart_set_axis_range(s_chart, LV_CHART_AXIS_PRIMARY_X, s_cached_x_min, s_cached_x_max);
     }
 
     /* Update electrode label */

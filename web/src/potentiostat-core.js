@@ -77,7 +77,7 @@ export function encodeDataPoint({ electrode, idx, E_mV, I_uA, RE_mV }) {
 // =============================================================================
 
 export const DPV_DEFAULTS = {
-  e_begin_mV:          -500,
+  e_begin_mV:          -900,
   e_end_mV:             500,
   e_step_mV:              5,
   e_pulse_mV:            25,

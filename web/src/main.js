@@ -214,8 +214,10 @@ function flushPendingPoints() {
   const total = Object.values(scanSeries).reduce((s, ss) => s + ss.xs.length, 0);
   $ptsVal.textContent = total;
 
-  // Update chart data
-  if (chart) chart.setData(buildChartData(), false /* no scale reset during live */);
+  // Update chart data. resetScales=true so the auto-ranged x/y axes expand to
+  // fit the sweep as points stream in (otherwise the curve renders off-screen
+  // and the chart looks blank until another setData forces a rescale).
+  if (chart) chart.setData(buildChartData(), true);
 }
 
 // =============================================================================

@@ -369,6 +369,10 @@ lv_obj_t *scr_home_create(lv_group_t *group)
     lv_obj_set_style_text_font(hint_r, &lv_font_montserrat_14, 0);
     lv_obj_align(hint_r, LV_ALIGN_RIGHT_MID, -8, 0);
 
+    /* Sync both electrode labels to the current default (s_electrode) instead
+     * of the "E1"/"1" placeholders created above. */
+    update_electrode_label();
+
     ESP_LOGI(TAG, "Home screen created");
     return s_scr;
 }

@@ -43,7 +43,7 @@ static lv_obj_t  *s_dot_status  = NULL;   /* 10×10 circle: green/amber/red     
 static lv_obj_t  *s_lbl_status  = NULL;   /* "READY" / "RUNNING" text              */
 static lv_obj_t  *s_lbl_elec    = NULL;   /* "Electrode: 1" in status bar          */
 static lv_group_t *s_grp        = NULL;
-static uint8_t    s_electrode   = 1;      /* Selected electrode (1-3; 0=All) */
+static uint8_t    s_electrode   = 3;      /* Selected electrode (1-3; 0=All) */
 static float      s_e_begin_mV = -900.0f; /* Last-used DPV E range (mV) */
 static float      s_e_end_mV   =  500.0f;
 

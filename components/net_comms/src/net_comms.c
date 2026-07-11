@@ -751,6 +751,24 @@ static esp_err_t api_nav_handler(httpd_req_t *req)
 }
 
 /* --------------------------------------------------------------------------
+ * TFT scroll API — POST /api/scroll
+ * Advances the on-screen focus one step (one encoder tick), like the NAV button.
+ * No body required. ui_tft_input_scroll() is thread-safe.
+ * -------------------------------------------------------------------------- */
+
+static esp_err_t api_scroll_handler(httpd_req_t *req)
+{
+    esp_err_t err = ui_tft_input_scroll();
+    httpd_resp_set_type(req, HTTPD_TYPE_JSON);
+    if (err == ESP_OK) {
+        httpd_resp_sendstr(req, "{\"ok\":true}");
+    } else {
+        httpd_resp_sendstr(req, "{\"ok\":false,\"err\":\"TFT not ready\"}");
+    }
+    return ESP_OK;
+}
+
+/* --------------------------------------------------------------------------
  * Static file server (LittleFS assets for P6 SPA)
  *
  * ends_with(), net_content_type(), net_path_is_traversal() all come from
@@ -925,6 +943,11 @@ static esp_err_t start_http_server(void)
     static const httpd_uri_t nav_uri = {
         .uri = "/api/nav", .method = HTTP_POST, .handler = api_nav_handler };
     httpd_register_uri_handler(s_server, &nav_uri);
+
+    /* --- TFT scroll: POST /api/scroll (advance focus one step) --- */
+    static const httpd_uri_t scroll_uri = {
+        .uri = "/api/scroll", .method = HTTP_POST, .handler = api_scroll_handler };
+    httpd_register_uri_handler(s_server, &scroll_uri);
 
     /* --- Captive portal probes --- */
     static const httpd_uri_t gen204 = {

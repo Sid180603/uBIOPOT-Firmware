@@ -284,6 +284,24 @@ async function start({ port = 3000, distDir = path.join(__dirname, 'dist') } = {
       return;
     }
 
+    // Remote TFT scroll — advance focus one step (no body)
+    if (req.method === 'POST' && req.url === '/api/scroll') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end('{"ok":true}');
+      return;
+    }
+
+    // Remote TFT navigation — {"screen":"home|scan|results|settings"} (mock: no TFT)
+    if (req.method === 'POST' && req.url === '/api/nav') {
+      let body = '';
+      req.on('data', c => body += c);
+      req.on('end', () => {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end('{"ok":true}');
+      });
+      return;
+    }
+
     // Static file serving
     serveFile(distDir, req.url, res);
   });

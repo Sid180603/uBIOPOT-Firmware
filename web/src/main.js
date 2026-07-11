@@ -543,6 +543,18 @@ document.querySelectorAll('#nav-btn-row [data-nav]').forEach((b) => {
   });
 });
 
+// Scroll button — advance TFT focus one step (POST /api/scroll)
+const $btnScroll = document.getElementById('btn-scroll');
+if ($btnScroll) {
+  $btnScroll.addEventListener('click', () => {
+    fetch('/api/scroll', { method: 'POST' })
+      .then((r) => (r.ok
+        ? showToast('Scrolled', 'info')
+        : showToast(`Scroll failed (${r.status})`, 'error')))
+      .catch(() => showToast('Scroll request failed', 'error'));
+  });
+}
+
 function setXAxis(mode) {
   xAxisMode = mode;
   document.getElementById('xaxis-cmd').classList.toggle('active', mode === 'cmd');

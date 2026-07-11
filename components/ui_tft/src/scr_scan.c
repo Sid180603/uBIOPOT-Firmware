@@ -211,6 +211,12 @@ static void scr_on_delete(lv_event_t *e)
     s_series[0] = s_series[1] = s_series[2] = NULL;
     if (s_flush_timer)   { lv_timer_del(s_flush_timer);   s_flush_timer = NULL; }
     if (s_elapsed_timer) { lv_timer_del(s_elapsed_timer); s_elapsed_timer = NULL; }
+    /* Clear the cached X (E) range so a stale range from this scan can't be
+     * applied to the next lazily-created scan screen before scr_scan_reset()
+     * refreshes it. Mirrors the statics' init values (0 / 1). */
+    s_x_range_valid = false;
+    s_cached_x_min  = 0;
+    s_cached_x_max  = 1;
     s_scr = NULL;
 }
 

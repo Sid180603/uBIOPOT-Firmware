@@ -72,6 +72,17 @@ typedef enum {
 esp_err_t ui_tft_request_nav(ui_screen_t screen);
 
 /**
+ * @brief  Thread-safe TFT "scroll" — advance the on-screen focus one step,
+ *         exactly like a press of the physical NAV/encoder button.
+ *
+ * Injects one encoder-rotate tick and wakes the LVGL task. Safe to call from
+ * the httpd task or any FreeRTOS task context.
+ *
+ * Returns ESP_ERR_INVALID_STATE if ui_tft_start() has not yet completed.
+ */
+esp_err_t ui_tft_input_scroll(void);
+
+/**
  * @brief  Update the WiFi information shown on the Settings screen.
  *
  * Called by net_comms (P5) once WiFi is configured.

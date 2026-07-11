@@ -96,9 +96,9 @@ menu "Aqua-HMET Hardware Configuration"
     menu "Buttons"
         config UBIOPOT_BTN_START
             int "Start/Select Button GPIO"
-            default 14
+            default 13
             help
-                Primary button (GPIO14). Active-low, INPUT_PULLUP.
+                Primary button (GPIO13). Active-low, INPUT_PULLUP.
                 Short press = select/confirm/start. Long press (during scan) = abort.
 
         config UBIOPOT_BTN_NAV
@@ -125,9 +125,11 @@ menu "Aqua-HMET Hardware Configuration"
 
         config UBIOPOT_LED_PROCESSING
             int "Processing LED GPIO"
-            default 13
+            default 27
             help
-                ON = measurement in progress.
+                ON = measurement in progress. Relocated to GPIO27 (a free full-function
+                pin, no strapping concerns) so GPIO13 could be reassigned to the Start
+                button on the demo unit. No physical LED is attached on GPIO27.
     endmenu
 
     menu "WiFi Defaults"

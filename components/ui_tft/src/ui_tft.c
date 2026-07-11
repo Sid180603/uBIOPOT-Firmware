@@ -71,7 +71,7 @@ static const char *TAG = "ui_tft";
  * ========================================================================= */
 
 static lv_indev_t        *s_indev    = NULL;
-static volatile int32_t   s_enc_diff = 0;    /* NAV press count since last read */
+static _Atomic int32_t    s_enc_diff = 0;    /* NAV press count since last read */
 static volatile bool      s_btn_enter = false; /* START held down */
 
 /* =========================================================================
@@ -89,9 +89,10 @@ static bool        s_wifi_info_pending = false;
 
 static void encoder_read_cb(lv_indev_t *indev, lv_indev_data_t *data)
 {
-    data->enc_diff = s_enc_diff;
+    /* Atomic swap-and-clear: consumes every tick accumulated since the last
+     * read without racing the producers (NAV button + httpd scroll). */
+    data->enc_diff = atomic_exchange(&s_enc_diff, 0);
     data->state    = s_btn_enter ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
-    s_enc_diff     = 0;
 }
 
 /* ---- Button callbacks (called from iot_button task, NOT ISR context) ---- */
@@ -99,7 +100,7 @@ static void encoder_read_cb(lv_indev_t *indev, lv_indev_data_t *data)
 static void on_nav_press_down(void *handle, void *usr)
 {
     (void)handle; (void)usr;
-    s_enc_diff++;
+    atomic_fetch_add(&s_enc_diff, 1);
     lvgl_port_task_wake(LVGL_PORT_EVENT_ENCODER, s_indev);
 }
 
@@ -498,6 +499,17 @@ esp_err_t ui_tft_request_nav(ui_screen_t screen)
             return ESP_ERR_INVALID_ARG;
     }
     lvgl_port_unlock();
+    return ESP_OK;
+}
+
+esp_err_t ui_tft_input_scroll(void)
+{
+    if (!atomic_load(&s_tft_ready)) return ESP_ERR_INVALID_STATE;
+    /* Mirror on_nav_press_down: bump the encoder delta + wake the LVGL task.
+     * No lvgl_port_lock needed — s_enc_diff is atomic and consumed in
+     * encoder_read_cb; lvgl_port_task_wake() is thread-safe. */
+    atomic_fetch_add(&s_enc_diff, 1);
+    lvgl_port_task_wake(LVGL_PORT_EVENT_ENCODER, s_indev);
     return ESP_OK;
 }
 

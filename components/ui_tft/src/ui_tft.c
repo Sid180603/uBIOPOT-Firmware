@@ -217,6 +217,7 @@ static void sink_on_event(scan_event_t evt, const char *info, void *ctx)
             scr_scan_stop_elapsed();
             scr_home_set_state(SCAN_STATE_IDLE);
             screen_mgr_goto_home();
+            lv_indev_wait_release(s_indev);
             screen_mgr_show_toast("Scan aborted", TOAST_INFO);
             pstat_led_set(PSTAT_LED_READY,      true);
             pstat_led_set(PSTAT_LED_PROCESSING, false);
@@ -225,6 +226,7 @@ static void sink_on_event(scan_event_t evt, const char *info, void *ctx)
         case SCAN_EVT_ERROR:
             scr_home_set_state(SCAN_STATE_ERROR);
             screen_mgr_goto_home();
+            lv_indev_wait_release(s_indev);
             if (info) {
                 screen_mgr_show_toast(info, TOAST_ERROR);
             } else {

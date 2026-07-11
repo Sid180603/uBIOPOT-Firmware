@@ -91,13 +91,13 @@ testWithServer('A1: page loads with correct title', async ({ page, server }) => 
   await expect(page).toHaveTitle(/Aqua-HMET/i);
 });
 
-testWithServer('A2: dark background applied', async ({ page, server }) => {
+testWithServer('A2: aqua background applied', async ({ page, server }) => {
   await page.goto(server.url);
   const bg = await page.evaluate(() =>
     window.getComputedStyle(document.body).backgroundColor
   );
-  // --bg: #080f1a = rgb(8, 15, 26)
-  expect(bg).toBe('rgb(8, 15, 26)');
+  // --bg: #edf5fa = rgb(237, 245, 250)
+  expect(bg).toBe('rgb(237, 245, 250)');
 });
 
 testWithServer('A3: Start DPV button visible', async ({ page, server }) => {
@@ -472,4 +472,50 @@ testWithServer('J2: GET /api/scan.csv returns CSV with header', async ({ page, s
   expect(text).toContain('electrode');
   expect(text).toContain('E_mV');
   expect(text).toContain('I_uA');
+});
+
+testWithServer('J3: POST /api/scroll returns {"ok":true}', async ({ page, server }) => {
+  const resp = await page.request.post(`${server.url}/api/scroll`);
+  expect(resp.ok()).toBe(true);
+  const body = await resp.json();
+  expect(body.ok).toBe(true);
+});
+
+testWithServer('J4: POST /api/nav returns {"ok":true} for valid screen', async ({ page, server }) => {
+  const resp = await page.request.post(`${server.url}/api/nav`, {
+    headers: { 'Content-Type': 'application/json' },
+    data: JSON.stringify({ screen: 'home' }),
+  });
+  expect(resp.ok()).toBe(true);
+  const body = await resp.json();
+  expect(body.ok).toBe(true);
+});
+
+testWithServer('J5: scroll button click shows success toast', async ({ page, server }) => {
+  await page.goto(server.url);
+  await page.waitForTimeout(400);
+
+  const scrollBtn = page.locator('#btn-scroll');
+  await expect(scrollBtn).toBeVisible();
+  await scrollBtn.click();
+
+  await page.waitForFunction(() => {
+    const t = document.querySelector('#toast');
+    return t && t.classList.contains('visible');
+  }, null, { timeout: 4000 });
+});
+
+testWithServer('J6: nav button click shows info toast', async ({ page, server }) => {
+  await page.goto(server.url);
+  await page.waitForTimeout(400);
+
+  // Click the first nav button (home)
+  const navBtn = page.locator('[data-nav]').first();
+  await expect(navBtn).toBeVisible();
+  await navBtn.click();
+
+  await page.waitForFunction(() => {
+    const t = document.querySelector('#toast');
+    return t && t.classList.contains('visible');
+  }, null, { timeout: 4000 });
 });

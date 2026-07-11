@@ -26,7 +26,7 @@ Then open `http://localhost:3000` in your browser on Windows. You'll see the rea
 
 ## Level 2 — Playwright E2E Tests (automated, headless)
 
-24 automated tests that verify specific behaviours without you clicking anything:
+28 automated tests that verify specific behaviours without you clicking anything:
 
 ```bash
 cd '/c/Users/z00541ce/Documents/Coding/ST Thesis/uBIOPOT-Firmware/web'
@@ -69,4 +69,4 @@ Then at [wokwi.com](https://wokwi.com/projects/new/esp32):
 3. The firmware boots, LVGL renders on the simulated ILI9341 panel, WiFi SoftAP starts
 4. Wokwi has a simulated WiFi AP you can "join" from the sim's browser to hit the HTTP/WS server
 
-**Limitation for Aqua-HMET:** The ADS1115 (I2C) and MCP4921 (SPI) would need custom Wokwi chips (C/WASM) to close the analog loop — without them the HAL self-test would fail but the TFT UI and WiFi server would still run. Custom chips are the plan's L7 "centerpiece" and are a future CI task.
+Custom Wokwi chips for ADS1115 (I²C ADC with Gaussian cell model) and MCP4921 (SPI DAC) are implemented in `chips/` and run in CI (Job 7). The full analog loop is closed in simulation — HAL selftest passes, DPV scans produce synthetic peaks, and the serial handshake is verified.

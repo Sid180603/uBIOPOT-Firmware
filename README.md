@@ -14,15 +14,18 @@ ESP-IDF firmware for the Aqua-HMET DPV heavy metal detector (BITS Pilani, 2025�
 
 ```
 components/
-  echem_core/   — Pure C, no IDF/FreeRTOS. DPV algo, calibration, peak finder, protocol types.
-                  Compiles on HOST (PC) for unit testing. The testability keystone.
-  pstat_hal/    — HAL: MCP4921 DAC, ADS1115 ADC (continuous GAIN_ONE), CD4066 mux, buttons, LEDs.
-  acq_engine/   — FreeRTOS: Core-1 AcquisitionTask, data queue, engine API, server-auth buffer.
-  ui_tft/       — LVGL on-device UI: ILI9341 display, 2-button encoder navigation, live chart.
-  net_comms/    — WiFi (SoftAP + STA), captive portal, mDNS, HTTP server, WebSocket (P5).
-host_test/      — Standalone CMake + Unity. Tests echem_core on host GCC (no hardware needed).
-web/            — SPA source (Vite + uPlot). Built output gzip-compressed → LittleFS image.
-                  Includes mock_backend.js (Node WS mock), Playwright E2E tests, potentiostat-core.js.
+  echem_core/    — Pure C, no IDF/FreeRTOS. DPV algo, calibration, peak finder, metal ID,
+                   WHO limits, protocol types. Compiles on HOST (PC) for unit testing.
+  pstat_hal/     — HAL: MCP4921 DAC, ADS1115 ADC (continuous GAIN_ONE), CD4066 mux, buttons, LEDs.
+  acq_engine/    — FreeRTOS: Core-1 AcquisitionTask, data queue, engine API, server-auth buffer.
+  ui_tft/        — LVGL on-device UI: ILI9341 display, 2-button encoder navigation, live chart.
+  net_comms/     — WiFi (SoftAP + STA), captive portal, mDNS, HTTP server, WebSocket binary protocol.
+  serial_comms/  — USB serial NDJSON protocol (UART0), engine sink, command parser, parity with web.
+host_test/       — Standalone CMake + Unity. Tests echem_core on host GCC (no hardware needed).
+web/             — SPA source (Vite + uPlot). Built output gzip-compressed → LittleFS image.
+                   Includes mock_backend.js (Node WS mock), Playwright E2E tests, potentiostat-core.js.
+tools/           — serial_client.py — reference Python CLI for the NDJSON serial protocol.
+chips/           — Custom Wokwi chips: MCP4921 (SPI DAC) + ADS1115 (I²C ADC with Gaussian cell model).
 ```
 
 ---
@@ -90,6 +93,8 @@ After the first build, commit the generated `dependencies.lock`:
 
     idf.py -p <PORT> flash monitor
 
+Default electrode is **Electrode 3** (configurable from the TFT home screen or web UI).
+
 ---
 
 ## Phase Progress
@@ -102,48 +107,56 @@ After the first build, commit the generated `dependencies.lock`:
 | P3 | ✅ Done | Acquisition engine (FreeRTOS Core-1 AcqTask, Core-0 Dispatcher, server-auth buffer, sink API) |
 | P4 | ✅ Done | On-device LVGL UI (ILI9341, 2-button encoder nav, 6 screens, live voltammogram, engine sink) — **display validated on real hardware** |
 | P5 | ✅ Done | Connectivity (WiFi SoftAP+STA, captive portal, mDNS, WebSocket, HTTP API, LittleFS) |
-| P6 | ✅ Done | Web SPA (uPlot, deep-ocean dark theme, live chart, CSV export/import overlay, 24 Playwright E2E tests) |
-| P7 | ⏳ | USB serial protocol (NDJSON, parity with web) — **publishable milestone** |
-| P8 | ⏳ | Persistence + calibration (NVS, auto-zero, bench calibration, concentration slopes, WHO threshold display) |
-| P9 | ⏳ | Integration + hardware validation vs commercial instrument + perf profiling + thesis figures |
+| P6 | ✅ Done | Web SPA (uPlot, aqua-metal light theme, live chart, CSV export/import overlay, 28 Playwright E2E tests) |
+| P7 | ✅ Done | USB serial protocol (NDJSON on UART0, parity with web, serial_client.py reference CLI, Wokwi custom chips) — **publishable milestone** |
+| P8 | ⏳ Next | Persistence + calibration (NVS, auto-zero, bench calibration, concentration slopes, WHO threshold display) |
+| P9 | ⏳ | Integration + hardware validation vs commercial instrument + Web Serial standalone + perf profiling + thesis figures |
 
-**Publishable milestone:** end of P7 — DPV working across TFT + WiFi web + USB serial simultaneously.
+**Publishable milestone (reached):** end of P7 — DPV working across TFT + WiFi web + USB serial simultaneously.
 
-**Build status (P6):** ~630 KB binary pre-WiFi; final size to be updated after P7 build.
-
-### Hardware bring-up (2026-07-05 · ESP32-D0WD-V3)
-
-First on-silicon validation of P1–P4:
-
-- **HAL selftest PASS** — MCP4921 DAC ramp, ADS1115 (`0x48`) reads, CD4066 mux cycle (T1→T2→T3), LED drive.
-- **TFT UI renders** — splash → home at 40 MHz SPI, correct orientation.
-
-Two firmware fixes were required for on-device operation (neither reproduces in the PC sim, which uses CLIB
-malloc + a huge host stack):
-
-1. **LVGL allocator** — the builtin 64 KB TLSF pool OOM'd while building 5 screens + Montserrat 14/20/28
-   (`lv_realloc` → NULL → assert spin → task-WDT reboot loop). Fixed with `CONFIG_LV_USE_CLIB_MALLOC=y` so
-   LVGL uses the full ESP-IDF heap (~180 KB). Main task stack also raised to 16384.
-2. **TFT orientation** — `esp_lvgl_port` re-applies `disp_cfg.rotation` to the panel via `esp_lcd`, overriding
-   any manual `esp_lcd_panel_swap_xy/mirror`. Set orientation **only** in `lvgl_port_display_cfg_t.rotation`
-   (`swap_xy/mirror_x/mirror_y = true` for this panel/mount) — manual MADCTL calls cause a stride-shear image.
+**Build size (P7):** `aquahmet.bin` 1292 KB (firmware) + `littlefs.bin` 1000 KB (web SPA) + bootloader 25 KB + partition table 3 KB. Total flash usage: ~2.3 MB of 4 MB.
 
 ---
 
-## P5/P6 Web Stack — Dev Loop (No Hardware Required)
+## CI (7 jobs — all green)
 
-Four levels, fastest to most realistic:
+| # | Job | What it verifies |
+|---|-----|-----------------|
+| 1 | Firmware Build | ESP-IDF v5.4.4 compile (esp32 target) |
+| 2 | Host Unit Tests | echem_core on Ubuntu GCC + purity check |
+| 3 | Protocol Conformance | P5 WebSocket pytest + net_comms_protocol.h purity |
+| 4 | Playwright E2E | P6 SPA headless Chromium (28 tests) |
+| 5 | Serial Protocol | P7 NDJSON pytest + serial_comms_protocol.h parity |
+| 6 | Serial PTY E2E | P7 pipe-based MockDevice E2E pytest |
+| 7 | Wokwi Simulation | L7 full-device sim with custom WASM chips (MCP4921 + ADS1115) |
+
+---
+
+## Dev Loop (no hardware required)
 
 | Level | Command | What it proves |
 |-------|---------|----------------|
 | **1 — Node mock** | `cd web && node mock_backend.js --port 3000` | Full SPA live in browser; Cd/Pb/Cu Gaussian peaks stream over real WS binary protocol |
-| **2 — Playwright** | `cd web && npm install && npm test` | 24 automated E2E tests — WS connect, form validation, binary frames, scan complete, CSV export, abort, resync, reference import |
-| **3 — pytest** | `pytest test/test_p5_protocol.py -v -k "not device"` | Wire-protocol unit tests (frame encoding, JSON schema, CSV format) — no browser |
-| **4 — Wokwi** | `idf.py uf2` → upload to wokwi.com | Real compiled firmware in browser; `FLASH_IN_PROJECT` ensures LittleFS SPA is bundled in `build/uf2.bin` — **deferred until after P7** |
+| **2 — Playwright** | `cd web && npm install && npm test` | 28 automated E2E tests — WS connect, form validation, binary frames, scan complete, CSV export, abort, resync, reference import, scroll/nav API |
+| **3 — pytest (web)** | `pytest test/test_p5_protocol.py -v -k "not device"` | Wire-protocol unit tests (frame encoding, JSON schema, CSV format) — no browser |
+| **4 — pytest (serial)** | `pytest test/test_p7_serial.py test/test_p7_pty.py -v` | NDJSON serial protocol conformance + pipe-based MockDevice E2E |
+| **5 — Wokwi** | CI or `wokwi-cli` with `WOKWI_CLI_TOKEN` | Real compiled firmware in simulator with custom DAC + ADC chips |
 
 Build the SPA (`npm run build`) before running the mock server or Playwright tests — the mock serves from `web/dist/`.
 
 See **[`Dev-Env.md`](Dev-Env.md)** for the complete walkthrough.
+
+---
+
+## WiFi Connection (Phone or Computer)
+
+The ESP32 runs a WiFi hotspot (`Aqua-HMET-<last 4 MAC digits>`, WPA2). Connect your phone or laptop to it.
+
+A captive portal intercepts DNS and pops the SPA in your browser automatically on iOS, Android, and Windows — no URL to type.
+
+Manual access: `http://192.168.4.1`
+
+The WebSocket streams live DPV data at `ws://192.168.4.1/ws` (binary DataPoint frames, 16 bytes LE).
 
 ---
 
@@ -170,7 +183,26 @@ navigation, synthetic DPV Gaussian voltammogram (Pb²⁺ peak at −400 mV), toa
 RAM budget under WiFi + LVGL simultaneously, physical button ergonomics.
 
 > **Validated on hardware (2026-07-05):** LVGL renders correctly on the ILI9341 at 40 MHz once the allocator
-> (CLIB) and orientation (`lvgl_port` rotation) were fixed — see **Hardware bring-up** above.
+> (CLIB) and orientation (`lvgl_port` rotation) were fixed — see **Hardware bring-up** below.
+
+---
+
+## Hardware Bring-up (2026-07-05 · ESP32-D0WD-V3)
+
+First on-silicon validation of P1–P4:
+
+- **HAL selftest PASS** — MCP4921 DAC ramp, ADS1115 (`0x48`) reads, CD4066 mux cycle (T1→T2→T3), LED drive.
+- **TFT UI renders** — splash → home at 40 MHz SPI, correct orientation.
+
+Two firmware fixes were required for on-device operation (neither reproduces in the PC sim, which uses CLIB
+malloc + a huge host stack):
+
+1. **LVGL allocator** — the builtin 64 KB TLSF pool OOM'd while building 5 screens + Montserrat 14/20/28
+   (`lv_realloc` → NULL → assert spin → task-WDT reboot loop). Fixed with `CONFIG_LV_USE_CLIB_MALLOC=y` so
+   LVGL uses the full ESP-IDF heap (~180 KB). Main task stack also raised to 16384.
+2. **TFT orientation** — `esp_lvgl_port` re-applies `disp_cfg.rotation` to the panel via `esp_lcd`, overriding
+   any manual `esp_lcd_panel_swap_xy/mirror`. Set orientation **only** in `lvgl_port_display_cfg_t.rotation`
+   (`swap_xy/mirror_x/mirror_y = true` for this panel/mount) — manual MADCTL calls cause a stride-shear image.
 
 ---
 

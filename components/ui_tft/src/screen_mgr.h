@@ -108,6 +108,9 @@ void scr_scan_push_point(float E_mV, float I_uA);
 /** Update step progress display (n / total). */
 void scr_scan_set_progress(uint16_t step, uint16_t total);
 
+/** Set the total step count (used by flush timer for progress label). */
+void scr_scan_set_total_steps(uint16_t total);
+
 /** Switch scan screen to equilibration state (spinner + "Equilibrating..."). */
 void scr_scan_set_equilibrating(bool eq);
 

@@ -134,34 +134,15 @@ static void update_status_label(scan_state_t state)
             lv_obj_set_style_text_color(s_lbl_status, lv_color_hex(UI_COLOR_READY), 0);
             break;
         case SCAN_STATE_EQUILIBRATING:
-        case SCAN_STATE_RUNNING: {
+        case SCAN_STATE_RUNNING:
             lv_obj_set_style_bg_color(s_dot_status, lv_color_hex(UI_COLOR_PROC), 0);
             lv_label_set_text(s_lbl_status, "RUNNING");
             lv_obj_set_style_text_color(s_lbl_status, lv_color_hex(UI_COLOR_PROC), 0);
-            /* Pulse the dot: opacity 255→60→255, 1500 ms cycle */
-            lv_anim_init(&s_dot_anim);
-            lv_anim_set_var(&s_dot_anim, s_dot_status);
-            lv_anim_set_exec_cb(&s_dot_anim, dot_set_opa);
-            lv_anim_set_values(&s_dot_anim, LV_OPA_COVER, LV_OPA_20);
-            lv_anim_set_duration(&s_dot_anim, 750);
-            lv_anim_set_playback_duration(&s_dot_anim, 750);
-            lv_anim_set_repeat_count(&s_dot_anim, LV_ANIM_REPEAT_INFINITE);
-            lv_anim_start(&s_dot_anim);
             break;
-        }
         case SCAN_STATE_ABORTING:
             lv_obj_set_style_bg_color(s_dot_status, lv_color_hex(UI_COLOR_ABORT), 0);
             lv_label_set_text(s_lbl_status, "ABORTING");
             lv_obj_set_style_text_color(s_lbl_status, lv_color_hex(UI_COLOR_ABORT), 0);
-            /* Fast blink for abort */
-            lv_anim_init(&s_dot_anim);
-            lv_anim_set_var(&s_dot_anim, s_dot_status);
-            lv_anim_set_exec_cb(&s_dot_anim, dot_set_opa);
-            lv_anim_set_values(&s_dot_anim, LV_OPA_COVER, LV_OPA_TRANSP);
-            lv_anim_set_duration(&s_dot_anim, 300);
-            lv_anim_set_playback_duration(&s_dot_anim, 300);
-            lv_anim_set_repeat_count(&s_dot_anim, LV_ANIM_REPEAT_INFINITE);
-            lv_anim_start(&s_dot_anim);
             break;
         case SCAN_STATE_ERROR:
             lv_obj_set_style_bg_color(s_dot_status, lv_color_hex(UI_COLOR_ABORT), 0);

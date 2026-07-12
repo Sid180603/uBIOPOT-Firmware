@@ -7,7 +7,7 @@
  *   │ STATUS BAR  E1  DPV  ●●●  10/240  +0.120V        │  h=24
  *   ├──────────────────────────────────────────────────┤
  *   │                                                   │
- *   │   lv_chart scatter   dI (µA) vs E (V)            │  h=152
+ *   │   lv_chart line      dI (µA) vs E (V)            │  h=152
  *   │   (draws L→R as points arrive)                    │
  *   │                                                   │
  *   ├──────────────────────────────────────────────────┤
@@ -18,7 +18,7 @@
  *
  * Data path (non-blocking):
  *   AcquisitionTask → DataPoint queue → DispatcherTask → scr_scan_push_point()
- *   → ring buffer → LVGL frame timer → lv_chart_set_next_value2()
+ *   → ring buffer → LVGL frame timer → direct series array write
  *
  * The ring buffer decouples the Dispatcher (Core 0) from LVGL rendering.
  * The per-frame timer flushes accumulated points in one batch, keeping
@@ -73,6 +73,18 @@ static uint32_t s_elapsed_s = 0;
 /* Dynamic Y-axis range tracking */
 static int32_t s_y_min = -100;
 static int32_t s_y_max =  100;
+
+/* Progress tracking (updated in flush timer, set via scr_scan_set_total_steps) */
+static uint16_t s_flushed_pts   = 0;
+static uint16_t s_total_steps   = 0;
+
+/* Render throttle — skip 3 of 4 flush timer ticks.  On skipped ticks the
+ * callback returns immediately → no invalidation → LVGL task sleeps → IDLE0
+ * runs → no WDT.  On the 4th tick all ring buffer points are drained via the
+ * standard lv_chart_set_next_value() API; their invalidations coalesce into
+ * a single SPI render at the end of that lv_timer_handler() cycle (~2 fps). */
+#define FLUSH_EVERY_N_TICKS  4   /* 4 × 125 ms = 500 ms → ~2 fps */
+static uint8_t s_flush_tick = 0;
 
 /* Cached X (E) range from scr_scan_reset(). Applied in scr_scan_create() so the
  * axis is correct even when reset() runs before the lazy scan screen exists
@@ -143,17 +155,19 @@ static void flush_timer_cb(lv_timer_t *t)
     (void)t;
     if (!s_chart) return;
 
-    chart_point_t pt;
-    bool updated = false;
-    while (ring_pop(&pt)) {
-        /* Active series = whichever was last reset via scr_scan_reset.
-         * set_next_value2 appends (x=E_mV, y=I_uA) to the scatter series.
-         * scr_scan_reset() clears the series (start_point=0) and sets the X-axis
-         * range, so points land at their true horizontal position across the sweep. */
-        lv_chart_series_t *ser = s_series[0];  /* single electrode default */
-        lv_chart_set_next_value2(s_chart, ser, pt.E_mV, pt.I_uA);
+    /* Skip 3 of 4 ticks — reduces chart rendering to ~2 fps.  On the 4th
+     * tick, drain the ring buffer; all invalidations coalesce into one
+     * SPI render. */
+    if (++s_flush_tick < FLUSH_EVERY_N_TICKS) return;
+    s_flush_tick = 0;
 
-        /* Auto-scale Y axis with 20 % headroom */
+    chart_point_t pt;
+    bool has_data = false;
+    lv_chart_series_t *ser = s_series[0];
+
+    while (ring_pop(&pt)) {
+        lv_chart_set_next_value(s_chart, ser, pt.I_uA);
+
         if (pt.I_uA < s_y_min || pt.I_uA > s_y_max) {
             int32_t range = (s_y_max - s_y_min);
             if (range < 1) range = 1;
@@ -161,10 +175,14 @@ static void flush_timer_cb(lv_timer_t *t)
             if (headroom < 5) headroom = 5;
             if (pt.I_uA < s_y_min) s_y_min = pt.I_uA - headroom;
             if (pt.I_uA > s_y_max) s_y_max = pt.I_uA + headroom;
-            lv_chart_set_axis_range(s_chart, LV_CHART_AXIS_PRIMARY_Y, s_y_min, s_y_max);
         }
+        s_flushed_pts++;
+        has_data = true;
+    }
 
-        /* Update live readouts (BUG 2: also update E label) */
+    if (has_data) {
+        lv_chart_set_axis_range(s_chart, LV_CHART_AXIS_PRIMARY_Y, s_y_min, s_y_max);
+
         char ibuf[20];
         snprintf(ibuf, sizeof(ibuf), "%+.1f µA", (float)pt.I_uA);
         lv_label_set_text(s_lbl_live_i, ibuf);
@@ -173,10 +191,15 @@ static void flush_timer_cb(lv_timer_t *t)
             snprintf(ebuf, sizeof(ebuf), "%+.3fV", pt.E_mV / 1000.0f);
             lv_label_set_text(s_lbl_live_e, ebuf);
         }
-        updated = true;
+        if (s_lbl_progress) {
+            char pbuf[16];
+            if (s_total_steps > 0)
+                snprintf(pbuf, sizeof(pbuf), "%u/%u", s_flushed_pts, s_total_steps);
+            else
+                snprintf(pbuf, sizeof(pbuf), "%u/--", s_flushed_pts);
+            lv_label_set_text(s_lbl_progress, pbuf);
+        }
     }
-
-    if (updated) lv_chart_refresh(s_chart);
 }
 
 /* -------------------------------------------------------------------------
@@ -270,7 +293,7 @@ lv_obj_t *scr_scan_create(lv_group_t *group)
     s_chart = lv_chart_create(s_scr);
     lv_obj_set_size(s_chart, LV_HOR_RES - 8, 152);
     lv_obj_set_pos(s_chart, 4, 26);
-    lv_chart_set_type(s_chart, LV_CHART_TYPE_SCATTER);
+    lv_chart_set_type(s_chart, LV_CHART_TYPE_LINE);
     lv_chart_set_point_count(s_chart, UI_CHART_MAX_PTS);
 
     /* Remove default line/point dots for cleaner look at small resolution */
@@ -283,14 +306,15 @@ lv_obj_t *scr_scan_create(lv_group_t *group)
     lv_obj_set_style_border_width(s_chart, 1, 0);
     lv_obj_set_style_pad_all(s_chart, 6, 0);
     lv_obj_set_style_radius(s_chart, 4, 0);
+    lv_obj_set_style_size(s_chart, 0, 0, LV_PART_INDICATOR);
     /* Grid lines */
     lv_obj_set_style_line_color(s_chart, lv_color_hex(UI_COLOR_BORDER), LV_PART_MAIN);
 
     /* Initial Y range */
     lv_chart_set_axis_range(s_chart, LV_CHART_AXIS_PRIMARY_Y, s_y_min, s_y_max);
 
-    /* Apply cached X (E) range if scr_scan_reset() already ran before this lazy
-     * screen was created — else the chart clamps the sweep to 0..point_count. */
+    /* Apply cached X (E) range.  For line charts this only affects axis tick
+     * labels (not point positions), but kept for consistency with axis labels. */
     if (s_x_range_valid) {
         lv_chart_set_axis_range(s_chart, LV_CHART_AXIS_PRIMARY_X, s_cached_x_min, s_cached_x_max);
     }
@@ -328,6 +352,7 @@ lv_obj_t *scr_scan_create(lv_group_t *group)
     lv_obj_set_style_arc_color(s_spinner, lv_color_hex(UI_COLOR_ACCENT), LV_PART_INDICATOR);
     lv_obj_set_style_arc_color(s_spinner, lv_color_hex(UI_COLOR_BORDER), LV_PART_MAIN);
     lv_obj_add_flag(s_spinner, LV_OBJ_FLAG_HIDDEN);
+    lv_anim_delete(s_spinner, NULL);
 
     /* ── Live readout row ───────────────────────────────────────── */
     lv_obj_t *row = lv_obj_create(s_scr);
@@ -387,7 +412,7 @@ lv_obj_t *scr_scan_create(lv_group_t *group)
     lv_obj_align(hint, LV_ALIGN_CENTER, 0, 0);
 
     /* ── Per-frame flush timer ──────────────────────────────────── */
-    s_flush_timer = lv_timer_create(flush_timer_cb, 33, NULL);  /* ~30 fps */
+    s_flush_timer = lv_timer_create(flush_timer_cb, 125, NULL);  /* ~8 fps — prevents LVGL task from starving IDLE0 (Task WDT) */
 
     /* Elapsed time ticker — starts paused; scr_scan_reset() enables it */
     s_elapsed_timer = lv_timer_create(elapsed_timer_cb, 1000, NULL);
@@ -443,7 +468,10 @@ void scr_scan_reset(uint8_t electrode, float e_begin_mV, float e_end_mV)
         lv_label_set_text(s_lbl_elec, buf);
     }
 
-    /* Reset progress */
+    /* Reset progress and render throttle */
+    s_flushed_pts  = 0;
+    s_total_steps  = 0;
+    s_flush_tick = 0;
     if (s_lbl_progress) lv_label_set_text(s_lbl_progress, "0/---");
     if (s_lbl_live_i)   lv_label_set_text(s_lbl_live_i, "+0.0 µA");
     if (s_lbl_live_e)   lv_label_set_text(s_lbl_live_e, "+0.000V");
@@ -452,12 +480,21 @@ void scr_scan_reset(uint8_t electrode, float e_begin_mV, float e_end_mV)
     if (s_lbl_elapsed)  lv_label_set_text(s_lbl_elapsed, "0:00");
     if (s_elapsed_timer) { lv_timer_resume(s_elapsed_timer); lv_timer_reset(s_elapsed_timer); }
 
-    /* Processing state */
+    /* Processing state — static dim (no animation; the infinite-repeat
+     * opacity animation starved IDLE0 on Core 0, causing Task WDT). */
     if (s_lbl_proc) {
         lv_label_set_text(s_lbl_proc, LV_SYMBOL_REFRESH "  MEASURING");
         lv_obj_set_style_text_color(s_lbl_proc, lv_color_hex(UI_COLOR_PROC), 0);
-        start_proc_anim();
+        lv_obj_set_style_opa(s_lbl_proc, LV_OPA_70, 0);
     }
+
+    /* Throttle display refresh to match our flush timer (~2 fps).
+     * The default 33ms period forces LVGL to redraw the line chart at
+     * 30 fps, saturating Core 0 with SPI transfers.  500ms gives IDLE0
+     * ample time to feed the Task WDT between frames. */
+    lv_timer_t *refr = lv_display_get_refr_timer(lv_display_get_default());
+    if (refr) lv_timer_set_period(refr, 500);
+
 }
 
 void scr_scan_push_point(float E_mV, float I_uA)
@@ -473,11 +510,19 @@ void scr_scan_set_progress(uint16_t step, uint16_t total)
     lv_label_set_text(s_lbl_progress, buf);
 }
 
+void scr_scan_set_total_steps(uint16_t total)
+{
+    s_total_steps = total;
+}
+
 void scr_scan_set_equilibrating(bool eq)
 {
     if (!s_scr) return;
     if (eq) {
-        if (s_spinner)   lv_obj_clear_flag(s_spinner, LV_OBJ_FLAG_HIDDEN);
+        if (s_spinner) {
+            lv_spinner_set_anim_params(s_spinner, 1000, 200);
+            lv_obj_clear_flag(s_spinner, LV_OBJ_FLAG_HIDDEN);
+        }
         if (s_chart)     lv_obj_add_flag(s_chart, LV_OBJ_FLAG_HIDDEN);
         if (s_lbl_proc) {
             lv_label_set_text(s_lbl_proc, "Equilibrating...");
@@ -485,12 +530,15 @@ void scr_scan_set_equilibrating(bool eq)
             stop_proc_anim();
         }
     } else {
-        if (s_spinner) lv_obj_add_flag(s_spinner, LV_OBJ_FLAG_HIDDEN);
+        if (s_spinner) {
+            lv_anim_delete(s_spinner, NULL);
+            lv_obj_add_flag(s_spinner, LV_OBJ_FLAG_HIDDEN);
+        }
         if (s_chart)   lv_obj_clear_flag(s_chart, LV_OBJ_FLAG_HIDDEN);
         if (s_lbl_proc) {
             lv_label_set_text(s_lbl_proc, LV_SYMBOL_REFRESH "  MEASURING");
             lv_obj_set_style_text_color(s_lbl_proc, lv_color_hex(UI_COLOR_PROC), 0);
-            start_proc_anim();
+            lv_obj_set_style_opa(s_lbl_proc, LV_OPA_70, 0);
         }
     }
 }
@@ -499,4 +547,9 @@ void scr_scan_stop_elapsed(void)
 {
     if (s_elapsed_timer) lv_timer_pause(s_elapsed_timer);
     stop_proc_anim();
+
+    /* Restore default display refresh rate for interactive screens */
+    lv_timer_t *refr = lv_display_get_refr_timer(lv_display_get_default());
+    if (refr) lv_timer_set_period(refr, LV_DEF_REFR_PERIOD);
+
 }

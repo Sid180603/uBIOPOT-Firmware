@@ -23,5 +23,6 @@ idf_component_register(
         espressif__esp_lcd_ili9341
         esp_lcd
         esp_driver_spi
+        esp_system
         log
 )

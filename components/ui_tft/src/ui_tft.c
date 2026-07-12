@@ -32,6 +32,7 @@
 #include "acq_engine.h"
 #include "echem_core/scan_state.h"
 #include "echem_core/peaks.h"
+#include "echem_core/dpv.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -170,80 +171,92 @@ static void sink_on_event(scan_event_t evt, const char *info, void *ctx)
 {
     (void)ctx;
 
-    /* Block indefinitely — events are rare and brief to process.
-     * A 50 ms timeout would silently drop SCAN_EVT_SCAN_DONE / SCAN_EVT_ERROR,
-     * leaving the UI stuck on the scan screen with LEDs in PROCESSING state. */
-    if (!lvgl_port_lock(0)) return;
+    /* Terminal events (SCAN_DONE, ABORTED, ERROR) use a 1 s timeout — long
+     * enough to catch the LVGL frame gap (~34 ms cycle) many times over.
+     * lvgl_port_lock(0) deadlocks on this hardware due to priority inversion
+     * (dispatcher prio 12 blocks on recursive mutex held by LVGL prio 4,
+     * LVGL can't run to release it).  Non-terminal events use 100 ms. */
+    bool terminal = (evt == SCAN_EVT_SCAN_DONE ||
+                     evt == SCAN_EVT_ABORTED   ||
+                     evt == SCAN_EVT_ERROR);
+    bool locked = lvgl_port_lock(terminal ? 1000 : 100);
 
     switch (evt) {
-        case SCAN_EVT_START:
-            /* Sync electrode from home screen (BUG 1 fix: was always 1). */
+        case SCAN_EVT_START: {
             s_electrode = scr_home_get_electrode();
             s_pt_count = 0;
             float eb, ee;
             scr_home_get_e_range(&eb, &ee);
-            scr_scan_reset(s_electrode, eb, ee);
-            /* Show equilibration spinner immediately — DPV always equilibrates
-             * first; SCAN_EVT_EQUILIB_DONE will clear it (ISSUE 2 fix). */
-            scr_scan_set_equilibrating(true);
-            scr_home_set_state(SCAN_STATE_RUNNING);
+            dpv_params_t dp = DPV_PARAMS_DEFAULT;
+            float span = (dp.e_end_mV - dp.e_begin_mV);
+            if (span < 0) span = -span;
+            uint16_t total = (uint16_t)(span / dp.e_step_mV) + 1;
+            if (locked) {
+                scr_scan_reset(s_electrode, eb, ee);
+                scr_scan_set_equilibrating(true);
+                scr_home_set_state(SCAN_STATE_RUNNING);
+            }
+            scr_scan_set_total_steps(total);
             pstat_led_set(PSTAT_LED_READY,      false);
             pstat_led_set(PSTAT_LED_PROCESSING, true);
             break;
+        }
 
         case SCAN_EVT_EQUILIB_DONE:
-            scr_scan_set_equilibrating(false);
+            if (locked) scr_scan_set_equilibrating(false);
             break;
 
         case SCAN_EVT_SCAN_DONE: {
-            scr_scan_stop_elapsed();
-            /* Detect peaks from collected data */
             s_n_peaks = peaks_find(s_I_buf, s_E_buf, s_pt_count,
-                                   s_peaks, MAX_PEAKS, 1.0f /* µA prominence */);
-            /* Navigate first so the results screen is created (lazy) before
-             * scr_results_set / scr_results_set_curve write into it.
-             * Reversed order would silently drop data on the first scan. */
-            screen_mgr_goto_results();
-            scr_results_set(s_peaks, s_n_peaks, s_electrode);
-            /* Pass raw curve for mini voltammogram (#12) */
-            scr_results_set_curve(s_E_buf, s_I_buf, s_pt_count);
-            scr_home_set_state(SCAN_STATE_IDLE);
+                                   s_peaks, MAX_PEAKS, 1.0f);
+            if (locked) {
+                scr_scan_stop_elapsed();
+                screen_mgr_goto_results();
+                scr_results_set(s_peaks, s_n_peaks, s_electrode);
+                scr_results_set_curve(s_E_buf, s_I_buf, s_pt_count);
+                scr_home_set_state(SCAN_STATE_IDLE);
+            }
             pstat_led_set(PSTAT_LED_READY,      true);
             pstat_led_set(PSTAT_LED_PROCESSING, false);
             break;
         }
 
         case SCAN_EVT_ABORTED:
-            scr_scan_stop_elapsed();
-            scr_home_set_state(SCAN_STATE_IDLE);
-            screen_mgr_goto_home();
-            lv_indev_wait_release(s_indev);
-            screen_mgr_show_toast("Scan aborted", TOAST_INFO);
+            if (locked) {
+                scr_scan_stop_elapsed();
+                scr_home_set_state(SCAN_STATE_IDLE);
+                screen_mgr_goto_home();
+                lv_indev_wait_release(s_indev);
+                screen_mgr_show_toast("Scan aborted", TOAST_INFO);
+            }
             pstat_led_set(PSTAT_LED_READY,      true);
             pstat_led_set(PSTAT_LED_PROCESSING, false);
             break;
 
         case SCAN_EVT_ERROR:
-            scr_home_set_state(SCAN_STATE_ERROR);
-            screen_mgr_goto_home();
-            lv_indev_wait_release(s_indev);
-            if (info) {
-                screen_mgr_show_toast(info, TOAST_ERROR);
-            } else {
-                screen_mgr_show_toast("Scan error \u2014 check params", TOAST_ERROR);
+            if (locked) {
+                scr_scan_stop_elapsed();
+                scr_home_set_state(SCAN_STATE_ERROR);
+                screen_mgr_goto_home();
+                lv_indev_wait_release(s_indev);
+                if (info) {
+                    screen_mgr_show_toast(info, TOAST_ERROR);
+                } else {
+                    screen_mgr_show_toast("Scan error \u2014 check params", TOAST_ERROR);
+                }
             }
             pstat_led_set(PSTAT_LED_READY,      true);
             pstat_led_set(PSTAT_LED_PROCESSING, false);
             break;
 
         case SCAN_EVT_RESET:
-            scr_home_set_state(SCAN_STATE_IDLE);
+            if (locked) scr_home_set_state(SCAN_STATE_IDLE);
             pstat_led_set(PSTAT_LED_READY,      true);
             pstat_led_set(PSTAT_LED_PROCESSING, false);
             break;
     }
 
-    lvgl_port_unlock();
+    if (locked) lvgl_port_unlock();
 }
 
 static void sink_on_resync(const DataPoint *buf, uint16_t count,

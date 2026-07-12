@@ -45,7 +45,7 @@ CONFIG_LV_FONT_MONTSERRAT_28=y
 CONFIG_LV_FONT_DEFAULT_MONTSERRAT_14=y
 
 # LVGL memory: use ESP-IDF heap (CLIB) instead of LVGL's builtin 64 KB TLSF pool.
-# 5 screens + scatter chart + 3 Montserrat fonts exceed 64 KB; the full heap has ~180 KB free.
+# 5 screens + line chart + 3 Montserrat fonts exceed 64 KB; the full heap has ~180 KB free.
 CONFIG_LV_USE_CLIB_MALLOC=y
 CONFIG_LV_USE_CLIB_STRING=y
 CONFIG_LV_USE_CLIB_SPRINTF=y
@@ -77,8 +77,10 @@ CONFIG_LWIP_MAX_SOCKETS=16
 # interface at init time (~15-20 KB heap). Disabling it reclaims that heap for LVGL.
 CONFIG_LWIP_IPV6=n
 
-# ---- Task WDT timeout ----
-# Default is 5 s. LVGL screen_mgr_init (5 screens + 3 fonts) runs on the main task
-# without yielding and can take >5 s when heap is fragmented after WiFi init.
-# Raised to 10 s to prevent spurious WDT resets during startup.
+# ---- Task WDT ----
+# IDLE0 monitoring disabled: the LVGL task legitimately saturates Core 0
+# during DPV scans (320-point line chart SPI rendering). IDLE0 can't
+# run enough to feed the WDT. The WDT itself stays enabled — it still
+# catches deadlocks on Core 1 (IDLE1) and any explicitly-subscribed tasks.
 CONFIG_ESP_TASK_WDT_TIMEOUT_S=10
+CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU0=n

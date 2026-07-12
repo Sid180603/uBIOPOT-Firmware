@@ -121,7 +121,7 @@ lv_obj_t *scr_results_create(lv_group_t *group)
     s_mini_chart = lv_chart_create(s_cont_peaks);
     lv_obj_set_size(s_mini_chart, 130, 100);
     lv_obj_set_pos(s_mini_chart, 4, 8);
-    lv_chart_set_type(s_mini_chart, LV_CHART_TYPE_SCATTER);
+    lv_chart_set_type(s_mini_chart, LV_CHART_TYPE_LINE);
     lv_chart_set_point_count(s_mini_chart, MINI_MAX_PTS);
     lv_chart_set_div_line_count(s_mini_chart, 2, 3);
     lv_obj_set_style_bg_color(s_mini_chart, lv_color_hex(UI_COLOR_BG), 0);
@@ -130,6 +130,7 @@ lv_obj_t *scr_results_create(lv_group_t *group)
     lv_obj_set_style_border_width(s_mini_chart, 1, 0);
     lv_obj_set_style_radius(s_mini_chart, 4, 0);
     lv_obj_set_style_pad_all(s_mini_chart, 4, 0);
+    lv_obj_set_style_size(s_mini_chart, 0, 0, LV_PART_INDICATOR);
     lv_obj_set_style_line_color(s_mini_chart, lv_color_hex(UI_COLOR_BORDER), LV_PART_MAIN);
     s_mini_series = lv_chart_add_series(s_mini_chart, lv_color_hex(UI_COLOR_ACCENT),
                                          LV_CHART_AXIS_PRIMARY_Y);
@@ -321,8 +322,7 @@ void scr_results_set_curve(const float *E_mV, const float *I_uA, uint16_t n)
                             (int32_t)(i_min - i_rng), (int32_t)(i_max + i_rng));
 
     for (uint16_t i = 0; i < n; i += step) {
-        lv_chart_set_next_value2(s_mini_chart, s_mini_series,
-                                 (int32_t)E_mV[i], (int32_t)I_uA[i]);
+        lv_chart_set_next_value(s_mini_chart, s_mini_series, (int32_t)I_uA[i]);
     }
     lv_chart_refresh(s_mini_chart);
 }

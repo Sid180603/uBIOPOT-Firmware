@@ -18,13 +18,13 @@ components/
                    WHO limits, protocol types. Compiles on HOST (PC) for unit testing.
   pstat_hal/     — HAL: MCP4921 DAC, ADS1115 ADC (continuous GAIN_ONE), CD4066 mux, buttons, LEDs.
   acq_engine/    — FreeRTOS: Core-1 AcquisitionTask, data queue, engine API, server-auth buffer.
-  ui_tft/        — LVGL on-device UI: ILI9341 display, 2-button encoder navigation, live chart.
+  ui_tft/        — LVGL on-device UI: ILI9341 display, 2-button encoder navigation, live line chart.
   net_comms/     — WiFi (SoftAP + STA), captive portal, mDNS, HTTP server, WebSocket binary protocol.
   serial_comms/  — USB serial NDJSON protocol (UART0), engine sink, command parser, parity with web.
 host_test/       — Standalone CMake + Unity. Tests echem_core on host GCC (no hardware needed).
 web/             — SPA source (Vite + uPlot). Built output gzip-compressed → LittleFS image.
                    Includes mock_backend.js (Node WS mock), Playwright E2E tests, potentiostat-core.js.
-tools/           — serial_client.py — reference Python CLI for the NDJSON serial protocol.
+tools/           — serial_client.py (reference Python CLI) + observe_scan.py (DPV scan capture + anomaly analysis).
 chips/           — Custom Wokwi chips: MCP4921 (SPI DAC) + ADS1115 (I²C ADC with Gaussian cell model).
 ```
 
@@ -114,6 +114,8 @@ Default electrode is **Electrode 3** (configurable from the TFT home screen or w
 
 **Publishable milestone (reached):** end of P7 — DPV working across TFT + WiFi web + USB serial simultaneously.
 
+**First DPV scan on real hardware (2026-07-12):** 281/281 points, scan_complete delivered, results screen loaded. Dry cell (open circuit) — flat ~0 µA as expected. Validated the full data pipeline from DAC/ADC through all three UIs.
+
 **Build size (P7):** `aquahmet.bin` 1292 KB (firmware) + `littlefs.bin` 1000 KB (web SPA) + bootloader 25 KB + partition table 3 KB. Total flash usage: ~2.3 MB of 4 MB.
 
 ---
@@ -148,6 +150,17 @@ See **[`Dev-Env.md`](Dev-Env.md)** for the complete walkthrough.
 
 ---
 
+## Observe a Real DPV Scan
+
+`tools/observe_scan.py` connects to the device over USB serial, optionally triggers a scan, records the full NDJSON stream, and prints an automated anomaly report.
+
+    py -3.12 tools/observe_scan.py --port COM9 --electrode 3          # trigger + capture
+    py -3.12 tools/observe_scan.py --port COM9 --observe-only         # listen only (trigger by button)
+
+Checks: point count, idx contiguity, E monotonicity, I/RE ranges, scan_complete delivery, WDT/crash logs. Stall detection auto-fires if no new point arrives within `--stall` seconds.
+
+---
+
 ## WiFi Connection (Phone or Computer)
 
 The ESP32 runs a WiFi hotspot (`Aqua-HMET-<last 4 MAC digits>`, WPA2). Connect your phone or laptop to it.
@@ -157,6 +170,22 @@ A captive portal intercepts DNS and pops the SPA in your browser automatically o
 Manual access: `http://192.168.4.1`
 
 The WebSocket streams live DPV data at `ws://192.168.4.1/ws` (binary DataPoint frames, 16 bytes LE).
+
+---
+
+## On-device DPV Scan Behavior
+
+The TFT scan screen shows a live LVGL line chart (I vs E) that updates at ~2 fps during the scan. A progress counter (`42/281`) and elapsed timer tick in real time. The scan sweeps from E_begin to E_end in 5 mV steps (~60 s for a full -900 to +500 mV sweep).
+
+**Memory-constrained rendering:** The ESP32-WROOM-32 has no PSRAM. WiFi + LVGL + SPI display rendering compete for ~233 KB of internal RAM. Key optimizations:
+- Line chart (not scatter) — ~8x faster rendering, prevents LVGL task from saturating Core 0
+- Flush timer throttle — chart data inserted every 500 ms (~2 fps), not per-point
+- Display refresh throttle — LVGL refresh period set to 500 ms during scans
+- WiFi buffer reduction + IPv6 disabled — reclaims ~20 KB heap
+- Single-buffered 20-line SPI draw buffer — halves DMA allocation vs double-buffered
+- Lazy screen creation — only splash + home at boot; scan/results/settings created on navigate
+
+**Abort:** Long-press the START button during a scan. The scan aborts, the TFT returns to the home screen, and the button release is suppressed (no accidental restart).
 
 ---
 
@@ -203,6 +232,20 @@ malloc + a huge host stack):
 2. **TFT orientation** — `esp_lvgl_port` re-applies `disp_cfg.rotation` to the panel via `esp_lcd`, overriding
    any manual `esp_lcd_panel_swap_xy/mirror`. Set orientation **only** in `lvgl_port_display_cfg_t.rotation`
    (`swap_xy/mirror_x/mirror_y = true` for this panel/mount) — manual MADCTL calls cause a stride-shear image.
+
+---
+
+## On-device Bug Fixes (2026-07-12 · first DPV scan debugging)
+
+Bugs found and fixed during the first real DPV scan on hardware:
+
+| Bug | Root cause | Fix |
+|-----|-----------|-----|
+| Button release after abort restarts scan | LVGL `CLICKED` event leaks across screen transition | `lv_indev_wait_release(s_indev)` after abort/error navigation |
+| Progress shows `0/---` | `scr_scan_set_progress()` had zero callers | Wired flush timer counter + `scr_scan_set_total_steps()` at scan start |
+| Task WDT fires during scan (IDLE0 starved) | Scatter chart + infinite animations saturate Core 0 | Line chart, animations removed, `CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU0=n` |
+| `scan_complete` never delivered | Dispatcher blocked on LVGL lock (priority inversion) | Per-event lock strategy: 1s timeout for terminal events, 100ms for non-terminal |
+| TFT stuck on scan screen | Lock timeout → `if(locked)` skipped screen transition | Terminal events use 1s timeout (sufficient for line chart frame gap) |
 
 ---
 

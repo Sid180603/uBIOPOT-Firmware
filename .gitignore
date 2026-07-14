@@ -32,6 +32,9 @@ web/.vite/
 web/playwright-report/
 web/test-results/
 
+# DPV scan captures (test artifacts from observe_scan.py)
+capture_*.ndjson
+
 # Python
 __pycache__/
 *.pyc

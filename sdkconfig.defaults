@@ -78,9 +78,7 @@ CONFIG_LWIP_MAX_SOCKETS=16
 CONFIG_LWIP_IPV6=n
 
 # ---- Task WDT ----
-# IDLE0 monitoring disabled: the LVGL task legitimately saturates Core 0
-# during DPV scans (320-point line chart SPI rendering). IDLE0 can't
-# run enough to feed the WDT. The WDT itself stays enabled — it still
-# catches deadlocks on Core 1 (IDLE1) and any explicitly-subscribed tasks.
+# Timeout raised from default 5s to 10s for LVGL screen_mgr_init (5 screens
+# + 3 fonts on a fragmented heap can take >5s). IDLE0 monitoring re-enabled
+# after the scatter→line chart fix eliminated the Core 0 saturation.
 CONFIG_ESP_TASK_WDT_TIMEOUT_S=10
-CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU0=n

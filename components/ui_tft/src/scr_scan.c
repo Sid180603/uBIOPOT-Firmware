@@ -488,13 +488,6 @@ void scr_scan_reset(uint8_t electrode, float e_begin_mV, float e_end_mV)
         lv_obj_set_style_opa(s_lbl_proc, LV_OPA_70, 0);
     }
 
-    /* Throttle display refresh to match our flush timer (~2 fps).
-     * The default 33ms period forces LVGL to redraw the line chart at
-     * 30 fps, saturating Core 0 with SPI transfers.  500ms gives IDLE0
-     * ample time to feed the Task WDT between frames. */
-    lv_timer_t *refr = lv_display_get_refr_timer(lv_display_get_default());
-    if (refr) lv_timer_set_period(refr, 500);
-
 }
 
 void scr_scan_push_point(float E_mV, float I_uA)
@@ -547,9 +540,4 @@ void scr_scan_stop_elapsed(void)
 {
     if (s_elapsed_timer) lv_timer_pause(s_elapsed_timer);
     stop_proc_anim();
-
-    /* Restore default display refresh rate for interactive screens */
-    lv_timer_t *refr = lv_display_get_refr_timer(lv_display_get_default());
-    if (refr) lv_timer_set_period(refr, LV_DEF_REFR_PERIOD);
-
 }

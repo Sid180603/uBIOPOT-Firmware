@@ -33,6 +33,14 @@ def parse_args():
                     help="seconds with no new point before declaring a stall")
     ap.add_argument("--observe-only", action="store_true",
                     help="do not send start; just listen (e.g., trigger scan by button)")
+    ap.add_argument("--pulse", type=float, default=None,
+                    help="DPV pulse amplitude in mV (default: firmware default 25)")
+    ap.add_argument("--step", type=float, default=None,
+                    help="DPV step size in mV (default: firmware default 5)")
+    ap.add_argument("--period", type=int, default=None,
+                    help="DPV period in ms (default: firmware default 200)")
+    ap.add_argument("--e-begin", type=float, default=None, help="sweep start in mV")
+    ap.add_argument("--e-end", type=float, default=None, help="sweep end in mV")
     ap.add_argument("--out", default=None, help="raw capture file (default: capture_<ts>.ndjson)")
     return ap.parse_args()
 
@@ -41,9 +49,11 @@ def main():
     a = parse_args()
     out_path = a.out or f"capture_{time.strftime('%Y%m%d_%H%M%S')}.ndjson"
 
-    # Expected sweep for default params (e_begin -900, e_end 500, step 5)
-    E_BEGIN, E_END, E_STEP = -900.0, 500.0, 5.0
-    expected_pts = int(round(abs(E_END - E_BEGIN) / E_STEP)) + 1  # 281
+    # Expected sweep — use overrides if provided, else firmware defaults
+    E_BEGIN = a.e_begin if a.e_begin is not None else -900.0
+    E_END   = a.e_end   if a.e_end   is not None else  500.0
+    E_STEP  = a.step    if a.step    is not None else    5.0
+    expected_pts = int(round(abs(E_END - E_BEGIN) / E_STEP)) + 1
 
     print(f"[open] {a.port} @ {a.baud}")
     try:
@@ -84,7 +94,16 @@ def main():
         # Clear any previously stuck/running scan so engine_start isn't rejected.
         ser.write(b'{"cmd":"abort"}\n')
         time.sleep(0.6)
-        cmd = json.dumps({"cmd": "start", "electrode": a.electrode})
+        start_obj = {"cmd": "start", "electrode": a.electrode}
+        params = {}
+        if a.pulse is not None:   params["e_pulse_mV"] = a.pulse
+        if a.step is not None:    params["e_step_mV"] = a.step
+        if a.period is not None:  params["t_period_ms"] = a.period
+        if a.e_begin is not None: params["e_begin_mV"] = a.e_begin
+        if a.e_end is not None:   params["e_end_mV"] = a.e_end
+        if params:
+            start_obj["params"] = params
+        cmd = json.dumps(start_obj)
         ser.write((cmd + "\n").encode())
         print(f"[send] {cmd}")
 

@@ -133,6 +133,26 @@ esp_err_t acq_engine_init(pstat_calib_t *cal);
 esp_err_t engine_start(uint8_t electrode, const dpv_params_t *params);
 
 /**
+ * @brief  Start a scan with an explicitly-named technique (e.g. "DPV", "CV").
+ *
+ * Generic variant of engine_start(): the technique is looked up by name in the
+ * registry, and its params struct is copied by value (max ENGINE_PARAMS_MAX = 64
+ * bytes).  engine_start() is a thin wrapper over this with technique = "DPV".
+ *
+ * @param  technique    Registered technique name (must match technique_t.name).
+ * @param  electrode    1/2/3 for a single electrode, 0 = ALL (1→2→3).
+ * @param  params       Pointer to the technique's params struct (copied).
+ * @param  params_size  sizeof that params struct (must be <= 64).
+ * @return ESP_OK
+ *         ESP_ERR_INVALID_STATE  engine not IDLE
+ *         ESP_ERR_INVALID_ARG    technique/params NULL
+ *         ESP_ERR_INVALID_SIZE   params_size > 64
+ *         ESP_ERR_TIMEOUT        command queue full
+ */
+esp_err_t engine_start_technique(const char *technique, uint8_t electrode,
+                                 const void *params, size_t params_size);
+
+/**
  * @brief  Request an abort of the running scan.
  *
  * Sets an atomic flag that the DPV algorithm polls via check_abort() after

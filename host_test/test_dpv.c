@@ -55,12 +55,15 @@ void test_registry_dpv_params_size_correct(void)
     TEST_ASSERT_EQUAL_size_t(sizeof(dpv_params_t), t->params_size);
 }
 
-/* Unimplemented techniques must return NULL, not crash */
-void test_registry_cv_returns_null(void)
+/* CV is now implemented + registered (bring-up/diagnostic technique). */
+void test_registry_cv_is_registered(void)
 {
-    TEST_ASSERT_NULL(technique_find("CV"));
+    const technique_t *t = technique_find("CV");
+    TEST_ASSERT_NOT_NULL(t);
+    TEST_ASSERT_EQUAL_STRING("CV", t->name);
 }
 
+/* Unimplemented techniques must return NULL, not crash */
 void test_registry_lsv_returns_null(void)
 {
     TEST_ASSERT_NULL(technique_find("LSV"));
@@ -653,7 +656,7 @@ int main(void)
     RUN_TEST(test_registry_find_dpv_not_null);
     RUN_TEST(test_registry_dpv_name_correct);
     RUN_TEST(test_registry_dpv_params_size_correct);
-    RUN_TEST(test_registry_cv_returns_null);
+    RUN_TEST(test_registry_cv_is_registered);
     RUN_TEST(test_registry_lsv_returns_null);
     RUN_TEST(test_registry_swv_returns_null);
     RUN_TEST(test_registry_unknown_returns_null);

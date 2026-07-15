@@ -34,6 +34,7 @@
 #include "pstat_hal/pstat_hal.h"
 #include "echem_core/technique.h"
 #include "echem_core/dpv.h"
+#include "echem_core/cv.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -73,10 +74,14 @@ typedef struct {
 
 typedef enum { ECMD_START, ECMD_ZERO } ecmd_type_t;
 
+/** Max size of any technique's params struct carried in a command. */
+#define ENGINE_PARAMS_MAX 64
+
 typedef struct {
     ecmd_type_t type;
     uint8_t     electrode;                  /**< 0 = ALL sequential, 1/2/3 = specific. */
-    uint8_t     params[sizeof(dpv_params_t)]; /**< dpv_params_t bytes. */
+    char        technique[8];               /**< Technique name, e.g. "DPV" / "CV". */
+    uint8_t     params[ENGINE_PARAMS_MAX];  /**< Technique params struct bytes. */
 } engine_cmd_t;
 
 /* ==========================================================================
@@ -323,22 +328,30 @@ static void acquisition_task(void *arg)
             continue;
         }
 
-        /* Find technique (v1: DPV only). */
-        const technique_t *t = technique_find("DPV");
+        /* Find the requested technique (DPV default, CV, ...). */
+        const char *tech_name = (cmd.technique[0] != '\0') ? cmd.technique : "DPV";
+        const technique_t *t = technique_find(tech_name);
         if (!t) {
             state_set(scan_state_next(SCAN_STATE_IDLE, SCAN_EVT_ERROR));
-            post_event(SCAN_EVT_ERROR, "technique DPV not found");
+            post_event(SCAN_EVT_ERROR, "technique not found");
             state_set(scan_state_next(SCAN_STATE_ERROR, SCAN_EVT_RESET));
             post_event(SCAN_EVT_RESET, NULL);
             continue;
         }
 
-        /* Copy params from command and validate. */
-        dpv_params_t params;
-        memcpy(&params, cmd.params, sizeof(dpv_params_t));
+        /* Copy params from command into an aligned union and validate.
+         * The union guarantees natural alignment for float/uint32 access on
+         * Xtensa (a raw uint8_t[] would not). */
+        union {
+            dpv_params_t dpv;
+            cv_params_t  cv;
+            uint8_t      raw[ENGINE_PARAMS_MAX];
+        } params;
+        size_t psize = t->params_size <= sizeof(params.raw) ? t->params_size : sizeof(params.raw);
+        memcpy(&params, cmd.params, psize);
         char err_buf[64] = {0};
         if (t->validate(&params, err_buf, sizeof(err_buf)) != 0) {
-            ESP_LOGW(TAG, "DPV param validation failed: %s", err_buf);
+            ESP_LOGW(TAG, "%s param validation failed: %s", t->name, err_buf);
             state_set(scan_state_next(SCAN_STATE_IDLE, SCAN_EVT_ERROR));
             post_event(SCAN_EVT_ERROR, err_buf);
             state_set(scan_state_next(SCAN_STATE_ERROR, SCAN_EVT_RESET));
@@ -388,7 +401,7 @@ static void acquisition_task(void *arg)
              * real data point, after dpv_run() has completed its equilibration
              * delay, so the spinner is visible for the true equilibration period. */
             state_set(scan_state_next(SCAN_STATE_IDLE, SCAN_EVT_START));
-            post_event(SCAN_EVT_START, "DPV");
+            post_event(SCAN_EVT_START, t->name);
 
             /* Run the technique -- blocks for the full scan duration.
              * The EQUILIBRATING -> RUNNING transition now happens inside
@@ -532,14 +545,24 @@ esp_err_t acq_engine_init(pstat_calib_t *cal)
 esp_err_t engine_start(uint8_t electrode, const dpv_params_t *params)
 {
     if (!params) return ESP_ERR_INVALID_ARG;
+    return engine_start_technique("DPV", electrode, params, sizeof(dpv_params_t));
+}
+
+esp_err_t engine_start_technique(const char *technique, uint8_t electrode,
+                                 const void *params, size_t params_size)
+{
+    if (!technique || !params) return ESP_ERR_INVALID_ARG;
+    if (params_size > ENGINE_PARAMS_MAX) return ESP_ERR_INVALID_SIZE;
     if (atomic_load(&s_scan_state) != SCAN_STATE_IDLE) {
         return ESP_ERR_INVALID_STATE;
     }
 
     engine_cmd_t cmd;
+    memset(&cmd, 0, sizeof(cmd));
     cmd.type      = ECMD_START;
     cmd.electrode = electrode;
-    memcpy(cmd.params, params, sizeof(dpv_params_t));
+    strncpy(cmd.technique, technique, sizeof(cmd.technique) - 1);
+    memcpy(cmd.params, params, params_size);
 
     if (xQueueSend(s_cmd_queue, &cmd, pdMS_TO_TICKS(100)) != pdTRUE) {
         return ESP_ERR_TIMEOUT;

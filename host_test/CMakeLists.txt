@@ -28,6 +28,7 @@ set(ECHEM_CORE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../components/echem_core")
 
 set(ECHEM_CORE_SRCS
     "${ECHEM_CORE_DIR}/src/calibration.c"
+    "${ECHEM_CORE_DIR}/src/cv.c"
     "${ECHEM_CORE_DIR}/src/dpv.c"
     "${ECHEM_CORE_DIR}/src/peaks.c"
     "${ECHEM_CORE_DIR}/src/protocol.c"

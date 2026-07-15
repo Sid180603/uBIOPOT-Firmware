@@ -105,6 +105,7 @@ extern "C" {
 #define SERIAL_CMD_STATE   "state"
 #define SERIAL_CMD_HELLO   "hello"
 #define SERIAL_CMD_NAV     "nav"    /* drive the TFT: {"cmd":"nav","screen":"settings"} */
+#define SERIAL_CMD_CV      "cv"     /* cyclic voltammetry: {"cmd":"cv","electrode":3,"params":{...}} */
 
 /* --------------------------------------------------------------------------
  * DPV parameter keys (inside "params":{} of the start command)

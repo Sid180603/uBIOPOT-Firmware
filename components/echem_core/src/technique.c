@@ -1,5 +1,6 @@
 #include "echem_core/technique.h"
 #include "echem_core/dpv.h"
+#include "echem_core/cv.h"
 #include <string.h>
 
 static const technique_t *s_registry[TECHNIQUE_REGISTRY_MAX];
@@ -30,6 +31,9 @@ void technique_registry_init(void)
     s_count = 0;
     /* DPV is the default / only technique in v1. */
     technique_register(dpv_get_technique());
+
+    /* CV — cyclic voltammetry (bring-up/diagnostic + reversible-couple check). */
+    technique_register(cv_get_technique());
 
     /*
      * CV, LSV, SWV, NPV: registered here when implemented (post DPV publish).

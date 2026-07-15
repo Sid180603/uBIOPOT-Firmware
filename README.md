@@ -4,7 +4,7 @@ ESP-IDF firmware for the Aqua-HMET DPV heavy metal detector (BITS Pilani, 2025�
 
 **Hardware:** ESP32-WROOM-32 + MCP4921 12-bit SPI DAC + ADS1115 16-bit I²C ADC + 3× CD4066 electrode mux + ILI9341 2.4" TFT.
 
-**Default technique:** DPV (Differential Pulse Voltammetry). Architecture supports CV/LSV/SWV/NPV via the technique registry (to be added post-publish).
+**Techniques:** DPV (Differential Pulse Voltammetry) + CV (Cyclic Voltammetry). Architecture supports LSV/SWV/NPV via the technique registry.
 
 **Three synchronized UIs:** animated on-device TFT (LVGL) + WiFi web app (WebSocket SPA) + USB serial (NDJSON).
 
@@ -14,17 +14,19 @@ ESP-IDF firmware for the Aqua-HMET DPV heavy metal detector (BITS Pilani, 2025�
 
 ```
 components/
-  echem_core/    — Pure C, no IDF/FreeRTOS. DPV algo, calibration, peak finder, metal ID,
-                   WHO limits, protocol types. Compiles on HOST (PC) for unit testing.
+  echem_core/    — Pure C, no IDF/FreeRTOS. DPV + CV algorithms, calibration, peak finder,
+                   metal ID, WHO limits, technique registry, protocol types.
+                   Compiles on HOST (PC) for unit testing.
   pstat_hal/     — HAL: MCP4921 DAC, ADS1115 ADC (continuous GAIN_ONE), CD4066 mux, buttons, LEDs.
   acq_engine/    — FreeRTOS: Core-1 AcquisitionTask, data queue, engine API, server-auth buffer.
+                   Technique-agnostic dispatch — selects DPV/CV/... by name from the registry.
   ui_tft/        — LVGL on-device UI: ILI9341 display, 2-button encoder navigation, live line chart.
   net_comms/     — WiFi (SoftAP + STA), captive portal, mDNS, HTTP server, WebSocket binary protocol.
-  serial_comms/  — USB serial NDJSON protocol (UART0), engine sink, command parser, parity with web.
+  serial_comms/  — USB serial NDJSON protocol (UART0), engine sink, command parser, DPV + CV commands.
 host_test/       — Standalone CMake + Unity. Tests echem_core on host GCC (no hardware needed).
 web/             — SPA source (Vite + uPlot). Built output gzip-compressed → LittleFS image.
                    Includes mock_backend.js (Node WS mock), Playwright E2E tests, potentiostat-core.js.
-tools/           — serial_client.py (reference Python CLI) + observe_scan.py (DPV scan capture + anomaly analysis).
+tools/           — serial_client.py (reference Python CLI) + observe_scan.py (DPV/CV scan capture + anomaly analysis).
 chips/           — Custom Wokwi chips: MCP4921 (SPI DAC) + ADS1115 (I²C ADC with Gaussian cell model).
 ```
 
@@ -112,11 +114,35 @@ Default electrode is **Electrode 3** (configurable from the TFT home screen or w
 | P8 | ⏳ Next | Persistence + calibration (NVS, auto-zero, bench calibration, concentration slopes, WHO threshold display) |
 | P9 | ⏳ | Integration + hardware validation vs commercial instrument + Web Serial standalone + perf profiling + thesis figures |
 
-**Publishable milestone (reached):** end of P7 — DPV working across TFT + WiFi web + USB serial simultaneously.
+**Publishable milestone (reached):** end of P7 — DPV + CV working across TFT + WiFi web + USB serial simultaneously.
 
 **First DPV scan on real hardware (2026-07-12):** 281/281 points, scan_complete delivered, results screen loaded. Dry cell (open circuit) — flat ~0 µA as expected. Validated the full data pipeline from DAC/ADC through all three UIs.
 
+**First wet scan (2026-07-15):** 5 mM K₃[Fe(CN)₆] in 0.1 M KCl on screen-printed carbon electrode (Ag/AgCl RE). RE tracks E within ~19-45 mV — potentiostat voltage control confirmed. DPV peak is SNR-limited on this ADC (see Known Limitations below). CV implemented as the high-SNR diagnostic technique.
+
 **Build size (P7):** `aquahmet.bin` 1292 KB (firmware) + `littlefs.bin` 1000 KB (web SPA) + bootloader 25 KB + partition table 3 KB. Total flash usage: ~2.3 MB of 4 MB.
+
+---
+
+## Supported Techniques
+
+### DPV (Differential Pulse Voltammetry)
+Default technique. Staircase sweep with pulse at each step; plots ΔI = I_pulse − I_base vs E.
+
+    py -3.12 tools/observe_scan.py --port COM9 --electrode 3 --pulse 50
+
+Tunable at runtime: `--pulse`, `--step`, `--period`, `--t-pulse`, `--navg`, `--e-begin`, `--e-end`.
+
+### CV (Cyclic Voltammetry)
+Linear ramp E_begin → vertex1 → vertex2 → E_begin, N cycles. Plots raw I vs E.
+
+    py -3.12 tools/observe_scan.py --port COM9 --electrode 3 --cv --timeout 150 --stall 20
+
+Tunable: `--cv-begin`, `--cv-vtx1`, `--cv-vtx2`, `--cv-step`, `--cv-rate`, `--cv-cycles`, `--navg`.
+
+Serial command: `{"cmd":"cv","electrode":3,"params":{"e_vertex1_mV":600,"scan_rate_mV_s":50}}`
+
+Default CV params: E_begin = −200 mV, vertex1 = +600 mV, vertex2 = −200 mV, step = 5 mV, rate = 50 mV/s, 2 cycles, n_avg = 4.
 
 ---
 
@@ -150,14 +176,20 @@ See **[`Dev-Env.md`](Dev-Env.md)** for the complete walkthrough.
 
 ---
 
-## Observe a Real DPV Scan
+## Observe a Real Scan (DPV or CV)
 
-`tools/observe_scan.py` connects to the device over USB serial, optionally triggers a scan, records the full NDJSON stream, and prints an automated anomaly report.
+`tools/observe_scan.py` connects to the device over USB serial, triggers a scan (DPV or CV), records the full NDJSON stream, and prints an automated anomaly report.
 
-    py -3.12 tools/observe_scan.py --port COM9 --electrode 3          # trigger + capture
-    py -3.12 tools/observe_scan.py --port COM9 --observe-only         # listen only (trigger by button)
+    # DPV with custom pulse amplitude
+    py -3.12 tools/observe_scan.py --port COM9 --electrode 3 --pulse 50
 
-Checks: point count, idx contiguity, E monotonicity, I/RE ranges, scan_complete delivery, WDT/crash logs. Stall detection auto-fires if no new point arrives within `--stall` seconds.
+    # CV (cyclic voltammetry)
+    py -3.12 tools/observe_scan.py --port COM9 --electrode 3 --cv --timeout 150 --stall 20
+
+    # Listen only (trigger by TFT button)
+    py -3.12 tools/observe_scan.py --port COM9 --observe-only
+
+Checks: point count, idx contiguity, E monotonicity (DPV only), I/RE ranges, sign-alternating instability detection, scan_complete delivery, WDT/crash logs. Stall detection auto-fires if no new point arrives within `--stall` seconds.
 
 ---
 
@@ -169,23 +201,32 @@ A captive portal intercepts DNS and pops the SPA in your browser automatically o
 
 Manual access: `http://192.168.4.1`
 
-The WebSocket streams live DPV data at `ws://192.168.4.1/ws` (binary DataPoint frames, 16 bytes LE).
+The WebSocket streams live DPV/CV data at `ws://192.168.4.1/ws` (binary DataPoint frames, 16 bytes LE).
 
 ---
 
-## On-device DPV Scan Behavior
+## On-device Scan Behavior
 
-The TFT scan screen shows a live LVGL line chart (I vs E) that updates at ~2 fps during the scan. A progress counter (`42/281`) and elapsed timer tick in real time. The scan sweeps from E_begin to E_end in 5 mV steps (~60 s for a full -900 to +500 mV sweep).
+The TFT scan screen shows a live LVGL line chart (I vs E) that updates at ~2 fps during the scan. A progress counter (`42/281`) and elapsed timer tick in real time.
 
 **Memory-constrained rendering:** The ESP32-WROOM-32 has no PSRAM. WiFi + LVGL + SPI display rendering compete for ~233 KB of internal RAM. Key optimizations:
 - Line chart (not scatter) — ~8x faster rendering, prevents LVGL task from saturating Core 0
 - Flush timer throttle — chart data inserted every 500 ms (~2 fps), not per-point
-- Display refresh throttle — LVGL refresh period set to 500 ms during scans
 - WiFi buffer reduction + IPv6 disabled — reclaims ~20 KB heap
 - Single-buffered 20-line SPI draw buffer — halves DMA allocation vs double-buffered
 - Lazy screen creation — only splash + home at boot; scan/results/settings created on navigate
 
 **Abort:** Long-press the START button during a scan. The scan aborts, the TFT returns to the home screen, and the button release is suppressed (no accidental restart).
+
+---
+
+## Known Limitations
+
+**DPV small-signal detection:** The ADS1115 ADC (860 SPS, ~1.2 ms/sample) limits DPV sensitivity on small signals. The DPV differential (ΔI = I_pulse − I_base) requires sampling during the faradaic transient, which decays within ~30 ms. At short pulse widths the transient is captured but noisy (±5–10 µA); at longer widths the signal decays away. DPV peaks below ~10 µA are SNR-limited. CV (raw current, ~43 µA for the same analyte) is not affected — it measures steady-state current without the transient-sampling constraint. Higher analyte concentrations (≥10 mM) produce proportionally larger DPV peaks that resolve cleanly.
+
+**No PSRAM:** The ESP32-WROOM-32 has no external RAM. All rendering, WiFi, and data buffers share ~233 KB of internal SRAM. This limits the TFT to a single draw buffer, 320 chart points, and lazy screen creation.
+
+**Demo unit hardware:** Only Electrode 3 is wired on the demo board. Electrodes 1/2, START button (GPIO14), and LEDs (GPIO12/13) are unwired. The final unit resolves all of these.
 
 ---
 
@@ -207,10 +248,6 @@ See **[`sim/WSL_SETUP.md`](sim/WSL_SETUP.md)** for the complete, verified setup 
 **Verified working (2026-07-03):** splash → home → scan-live → results flow, Tab/Enter/two-finger-scroll
 navigation, synthetic DPV Gaussian voltammogram (Pb²⁺ peak at −400 mV), toast on About.
 
-**What the sim proves:** screen layout, navigation flow, chart animation, transitions, fonts, colours.
-**What only the real board proves:** RGB565 byte-swap colour accuracy, 40 MHz SPI refresh smoothness,
-RAM budget under WiFi + LVGL simultaneously, physical button ergonomics.
-
 > **Validated on hardware (2026-07-05):** LVGL renders correctly on the ILI9341 at 40 MHz once the allocator
 > (CLIB) and orientation (`lvgl_port` rotation) were fixed — see **Hardware bring-up** below.
 
@@ -223,29 +260,27 @@ First on-silicon validation of P1–P4:
 - **HAL selftest PASS** — MCP4921 DAC ramp, ADS1115 (`0x48`) reads, CD4066 mux cycle (T1→T2→T3), LED drive.
 - **TFT UI renders** — splash → home at 40 MHz SPI, correct orientation.
 
-Two firmware fixes were required for on-device operation (neither reproduces in the PC sim, which uses CLIB
-malloc + a huge host stack):
+Two firmware fixes were required for on-device operation:
 
-1. **LVGL allocator** — the builtin 64 KB TLSF pool OOM'd while building 5 screens + Montserrat 14/20/28
-   (`lv_realloc` → NULL → assert spin → task-WDT reboot loop). Fixed with `CONFIG_LV_USE_CLIB_MALLOC=y` so
-   LVGL uses the full ESP-IDF heap (~180 KB). Main task stack also raised to 16384.
+1. **LVGL allocator** — the builtin 64 KB TLSF pool OOM'd while building 5 screens + Montserrat 14/20/28.
+   Fixed with `CONFIG_LV_USE_CLIB_MALLOC=y` (uses the full ESP-IDF heap ~180 KB).
 2. **TFT orientation** — `esp_lvgl_port` re-applies `disp_cfg.rotation` to the panel via `esp_lcd`, overriding
-   any manual `esp_lcd_panel_swap_xy/mirror`. Set orientation **only** in `lvgl_port_display_cfg_t.rotation`
-   (`swap_xy/mirror_x/mirror_y = true` for this panel/mount) — manual MADCTL calls cause a stride-shear image.
+   any manual `esp_lcd_panel_swap_xy/mirror`. Set orientation **only** in `lvgl_port_display_cfg_t.rotation`.
 
 ---
 
-## On-device Bug Fixes (2026-07-12 · first DPV scan debugging)
+## On-device Bug Fixes (2026-07-12–14)
 
-Bugs found and fixed during the first real DPV scan on hardware:
+Bugs found and fixed during the first real DPV scans on hardware:
 
 | Bug | Root cause | Fix |
 |-----|-----------|-----|
-| Button release after abort restarts scan | LVGL `CLICKED` event leaks across screen transition | `lv_indev_wait_release(s_indev)` after abort/error navigation |
-| Progress shows `0/---` | `scr_scan_set_progress()` had zero callers | Wired flush timer counter + `scr_scan_set_total_steps()` at scan start |
-| Task WDT fires during scan (IDLE0 starved) | Scatter chart + infinite animations saturate Core 0 | Line chart, animations removed, `CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU0=n` |
-| `scan_complete` never delivered | Dispatcher blocked on LVGL lock (priority inversion) | Per-event lock strategy: 1s timeout for terminal events, 100ms for non-terminal |
-| TFT stuck on scan screen | Lock timeout → `if(locked)` skipped screen transition | Terminal events use 1s timeout (sufficient for line chart frame gap) |
+| Button release after abort restarts scan | LVGL `CLICKED` event leaks across screen transition | `lv_indev_wait_release(s_indev)` after abort/error |
+| Progress shows `0/---` | `scr_scan_set_progress()` had zero callers | Flush timer counter + `scr_scan_set_total_steps()` at scan start |
+| Task WDT fires during scan | Scatter chart + infinite animations saturate Core 0 | **Line chart** (8x cheaper), animations removed |
+| `scan_complete` never delivered | Dispatcher blocked on LVGL lock (priority inversion) | Per-event lock: 1s for terminal events, 100ms for non-terminal |
+| TFT stuck on scan screen | Lock timeout skipped screen transition | Line chart renders fast → 1s timeout always succeeds |
+| LVGL calls without lock | `scr_scan_stop_elapsed()` outside lock guard | Moved inside `if (locked)` for terminal events |
 
 ---
 
@@ -258,18 +293,10 @@ Flash with `CONFIG_UBIOPOT_SELFTEST_MODE=y` (menuconfig → Aqua-HMET → Dev/De
 
 Selftest sequence (automated, ~40 s):
 1. **LED blink** — READY + PROCESSING alternate × 3 (visual)
-2. **DAC ramp** — steps 0→4095 in 512 increments, prints `Vout_expected` — verify with DMM at MCP4921 Vout pin
-3. **ADC reads** — 10 samples from AIN1 (current) + AIN0 (voltage), logs µA and V
-4. **Mux cycle** — T1→T2→T3→off, 100 ms each — verify with oscilloscope (only one HIGH at a time)
+2. **DAC ramp** — steps 0→4095 in 512 increments, prints `Vout_expected` — verify with DMM
+3. **ADC reads** — 10 samples from AIN1 (current) + AIN0 (voltage)
+4. **Mux cycle** — T1→T2→T3→off, 100 ms each
 5. **Button wait** — 10 s window; press START (GPIO14) or NAV (GPIO0) to log debounce events
-
-**P1 DoD** (hardware bench) — selftest **PASS** on ESP32-D0WD-V3 (2026-07-05):
-- [x] `ADS1115 ADC init OK` (`0x48` ACK) in serial log
-- [x] DAC ramp 0→4095 executed (selftest log) — DMM linearity check pending on final wired unit
-- [x] ADS1115 reads current (AIN1) + voltage (AIN0) channels
-- [x] Mux cycles T1→T2→T3 — scope isolation check pending on final unit
-- [ ] START + NAV buttons — **unwired on the demo unit** (hardware, not firmware); verify on final build
-- [x] READY LED = GPIO12 boots clean (no strapping fault); LED visibility pending on final wired unit
 
 ---
 
@@ -286,7 +313,7 @@ Selftest sequence (automated, ~40 s):
 | Voltage reconstructed from DAC count | Measured at ADS1115 AIN0 (RE readback) |
 | Fully blocking architecture, no abort | FreeRTOS Core-1 AcquisitionTask, instant abort flag |
 | No streaming protocol | Server-authoritative buffer + fan-out to 3 sinks (TFT / WS / serial) |
-| Single LSV technique hardcoded | Technique registry (DPV default; CV/LSV/SWV/NPV slots post-publish) |
+| Single LSV technique hardcoded | Technique registry with DPV + CV; extensible to LSV/SWV/NPV |
 
 ---
 

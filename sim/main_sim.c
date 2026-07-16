@@ -215,6 +215,18 @@ int main(int argc, char **argv)
     /* ---- 4. Init all screens and show splash ---- */
     screen_mgr_init(disp, enc_indev);
 
+    /* ---- Bug-B verification scaffold ----------------------------------------
+     * Simulates WiFi coming up BEFORE the Settings screen is created (lazy).
+     * Call set_wifi first (screen is NULL → values go into scr_settings.c cache),
+     * then goto_settings (lazy-creates the screen → cache applied at create time).
+     * Expected result: SDL window opens directly on Settings showing the injected
+     * SSID/IP/URL rather than "Not configured" / "---".
+     * Remove these two lines once verified; the underlying cache fix in
+     * scr_settings.c is permanent.
+     * ----------------------------------------------------------------------- */
+    scr_settings_set_wifi("Aqua-HMET-SIMTEST", "192.168.4.1", "http://aquahmet.local");
+    screen_mgr_goto_settings();
+
     printf("[SIM] Aqua-HMET PC Simulator ready\n");
     printf("[SIM] Mouse wheel = navigate   Middle click = select\n");
     printf("[SIM] Splash -> Home after ~2 s. Scroll to 'Start DPV' and middle-click.\n");

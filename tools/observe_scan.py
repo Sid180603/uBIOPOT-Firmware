@@ -46,6 +46,8 @@ def parse_args():
     ap.add_argument("--t-pulse", type=int, default=None,
                     help="pulse width in ms (default: firmware default 50)")
     # --- CV (cyclic voltammetry) mode ---
+    ap.add_argument("--zero", action="store_true",
+                    help="run auto-zero (cancel TIA current offset) before the scan")
     ap.add_argument("--cv", action="store_true",
                     help="run Cyclic Voltammetry instead of DPV")
     ap.add_argument("--cv-begin", type=float, default=None, help="CV start/return potential mV")
@@ -116,6 +118,11 @@ def main():
         # Clear any previously stuck/running scan so engine_start isn't rejected.
         ser.write(b'{"cmd":"abort"}\n')
         time.sleep(0.6)
+        # Optional auto-zero: cancel the constant TIA current offset before scanning.
+        if a.zero:
+            ser.write(b'{"cmd":"zero"}\n')
+            print('[send] {"cmd":"zero"}  (auto-zero current offset)')
+            time.sleep(1.5)   # mux settle (~300ms) + 64-sample avg + margin
         if a.cv:
             params = {}
             if a.cv_begin  is not None: params["e_begin_mV"]     = a.cv_begin

@@ -314,10 +314,29 @@ static void acquisition_task(void *arg)
         /* Block until a command arrives. */
         xQueueReceive(s_cmd_queue, &cmd, portMAX_DELAY);
 
-        /* ---- CMD_ZERO ---- */
+        /* ---- CMD_ZERO ----
+         * Auto-zero the current channel (P8): with the working electrode floating
+         * (mux fully deselected) the TIA carries no cell current, so its output
+         * reflects only the electronics quiescent offset (level-shifter / vref_mid
+         * mismatch).  Measure it and store the negated value as current_offset_uA
+         * so subsequent readings report ~0 at zero cell current.  This cancels the
+         * large constant baseline seen in CV (it already cancels in DPV's
+         * differential dI). */
         if (cmd.type == ECMD_ZERO) {
-            /* TODO P8: measure TIA quiescent, store to s_cal->current_offset_uA. */
-            ESP_LOGI(TAG, "CMD_ZERO: auto-zero not yet implemented (P8)");
+            if (atomic_load(&s_scan_state) != SCAN_STATE_IDLE) {
+                ESP_LOGW(TAG, "CMD_ZERO ignored — engine not IDLE (state=%d)",
+                         (int)atomic_load(&s_scan_state));
+                continue;
+            }
+            pstat_mux_deselect_all();            /* WE floating — no cell current */
+            float prev_offset = s_cal->current_offset_uA;
+            s_cal->current_offset_uA = 0.0f;      /* read the raw pedestal */
+            pstat_dac_set_volt(0.0f, s_cal);      /* DAC at vref_mid (nominal bias) */
+            vTaskDelay(pdMS_TO_TICKS(300));        /* settle TIA / level-shifter */
+            float pedestal = pstat_adc_read_current_uA(64, s_cal);
+            s_cal->current_offset_uA = -pedestal;  /* cancel it */
+            ESP_LOGI(TAG, "CMD_ZERO: current_offset_uA %.2f -> %.2f (pedestal %.2f uA)",
+                     prev_offset, s_cal->current_offset_uA, pedestal);
             continue;
         }
 

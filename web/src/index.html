@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Aqua-HMET — DPV Potentiostat</title>
+  <title>Aqua-HMET — Potentiostat</title>
   <link rel="stylesheet" href="./style.css">
 </head>
 <body>
@@ -29,7 +29,18 @@
 
       <!-- DPV parameters form -->
       <div class="card" id="params-card">
-        <div class="card-title">DPV Parameters</div>
+        <div class="card-title">
+          Parameters
+          <!-- Technique toggle -->
+          <span style="float:right" class="toggle-row">
+            <button class="btn active" id="tech-dpv" data-tech="DPV"
+                    style="padding:2px 10px;font-size:0.75rem">DPV</button>
+            <button class="btn"       id="tech-cv"  data-tech="CV"
+                    style="padding:2px 10px;font-size:0.75rem">CV</button>
+          </span>
+        </div>
+
+        <!-- ── DPV form ──────────────────────────────────────────── -->
         <form id="dpv-form" novalidate>
           <div class="field" id="f-e-begin">
             <label>E begin (mV)</label>
@@ -70,23 +81,81 @@
               <label>Equilibration (ms)</label>
               <input type="number" id="t-equil" value="2000" step="500" min="0">
             </div>
+            <div class="field">
+              <label>Cycles</label>
+              <input type="number" id="dpv-cycles" value="1" step="1" min="1">
+            </div>
+            <div class="field">
+              <label>Averages (n_avg)</label>
+              <input type="number" id="dpv-navg" value="5" step="1" min="1" max="32">
+            </div>
           </details>
 
           <!-- Scan time estimate -->
           <div id="scan-estimate" style="margin-top:4px">
             Estimated: <span id="scan-estimate-val">—</span>
           </div>
+        </form>
 
-          <div class="field">
-            <label>Electrode</label>
-            <select id="electrode">
-              <option value="1">Electrode 1</option>
-              <option value="2">Electrode 2</option>
-              <option value="3" selected>Electrode 3</option>
-              <option value="0">All (sequential)</option>
-            </select>
+        <!-- ── CV form (hidden until CV technique selected) ────── -->
+        <form id="cv-form" novalidate style="display:none">
+          <div class="field" id="f-cv-begin">
+            <label>E begin (mV)</label>
+            <input type="number" id="cv-e-begin" value="-200" step="10">
+            <div class="err">Must be within ±1000 mV</div>
+          </div>
+          <div class="field" id="f-cv-vertex1">
+            <label>E vertex 1 (mV)</label>
+            <input type="number" id="cv-e-vertex1" value="600" step="10">
+            <div class="err">Must be within ±1000 mV</div>
+          </div>
+          <div class="field" id="f-cv-vertex2">
+            <label>E vertex 2 (mV)</label>
+            <input type="number" id="cv-e-vertex2" value="-200" step="10">
+            <div class="err">Must be within ±1000 mV</div>
+          </div>
+          <div class="field" id="f-cv-step">
+            <label>E step (mV)</label>
+            <input type="number" id="cv-e-step" value="5" step="1" min="1">
+            <div class="err">Must be > 0</div>
+          </div>
+          <div class="field" id="f-cv-scanrate">
+            <label>Scan rate (mV/s)</label>
+            <input type="number" id="cv-scan-rate" value="50" step="10" min="1">
+            <div class="err">Must be > 0</div>
+          </div>
+          <details>
+            <summary class="adv-summary">
+              <span class="adv-arrow">▶</span> Advanced
+            </summary>
+            <div class="field">
+              <label>Equilibration (ms)</label>
+              <input type="number" id="cv-t-equil" value="2000" step="500" min="0">
+            </div>
+            <div class="field">
+              <label>Cycles</label>
+              <input type="number" id="cv-cycles" value="2" step="1" min="1">
+            </div>
+            <div class="field">
+              <label>Averages (n_avg)</label>
+              <input type="number" id="cv-navg" value="4" step="1" min="1" max="32">
+            </div>
+          </details>
+          <div id="cv-scan-estimate" style="margin-top:4px">
+            Estimated: <span id="cv-scan-estimate-val">—</span>
           </div>
         </form>
+
+        <!-- Shared electrode selector -->
+        <div class="field" style="margin-top:8px">
+          <label>Electrode</label>
+          <select id="electrode">
+            <option value="1">Electrode 1</option>
+            <option value="2">Electrode 2</option>
+            <option value="3" selected>Electrode 3</option>
+            <option value="0">All (sequential)</option>
+          </select>
+        </div>
 
         <div class="btn-row" style="margin-top:10px">
           <button class="btn btn-primary" id="btn-start" data-testid="btn-start" disabled>
@@ -94,6 +163,9 @@
           </button>
           <button class="btn btn-danger" id="btn-abort" data-testid="btn-abort" disabled>
             ■ Abort
+          </button>
+          <button class="btn" id="btn-zero" title="Auto-zero offset correction" disabled>
+            ⊘ Zero
           </button>
         </div>
       </div>
@@ -152,14 +224,16 @@
       <!-- Chart card -->
       <div class="card" style="flex:1;min-height:0;display:flex;flex-direction:column">
         <div class="card-title" style="margin-bottom:6px">
-          Voltammogram (dI vs E)
+          <span id="chart-title">Voltammogram (dI vs E)</span>
           <span style="float:right">
-            <span class="toggle-row">
+            <span class="toggle-row" id="xaxis-toggle">
               X-axis:
               <button class="btn active" id="xaxis-cmd"  data-axis="cmd"
                       style="padding:2px 8px;font-size:0.75rem">Commanded V</button>
               <button class="btn"       id="xaxis-re"   data-axis="re"
                       style="padding:2px 8px;font-size:0.75rem">Measured RE</button>
+              <button class="btn"       id="xaxis-idx"  data-axis="idx"
+                      style="padding:2px 8px;font-size:0.75rem">Sample #</button>
             </span>
           </span>
         </div>

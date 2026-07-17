@@ -23,6 +23,7 @@
 #include "acq_engine.h"
 #include "echem_core/scan_state.h"
 #include "echem_core/dpv.h"
+#include "echem_core/cv.h"
 #include "ui_tft.h"
 
 #include "esp_log.h"
@@ -475,6 +476,51 @@ static esp_err_t ws_handler(httpd_req_t *req)
             if (err_j) {
                 cJSON_AddStringToObject(err_j, "t", "error");
                 cJSON_AddStringToObject(err_j, "msg", esp_err_to_name(start_err));
+                char *s = cJSON_PrintUnformatted(err_j);
+                cJSON_Delete(err_j);
+                if (s) {
+                    httpd_ws_frame_t f = {
+                        .type    = HTTPD_WS_TYPE_TEXT,
+                        .payload = (uint8_t *)s,
+                        .len     = strlen(s),
+                        .final   = true,
+                    };
+                    httpd_ws_send_frame(req, &f);
+                    free(s);
+                }
+            }
+        }
+
+    } else if (strcmp(cmd, "cv") == 0) {
+        /* Cyclic voltammetry: {"cmd":"cv","electrode":3,"params":{...}} */
+        cJSON *p_j    = cJSON_GetObjectItem(cmd_j, "params");
+        cJSON *elec_j = cJSON_GetObjectItem(cmd_j, "electrode");
+        uint8_t electrode = (elec_j && cJSON_IsNumber(elec_j))
+                            ? (uint8_t)elec_j->valuedouble : 3u;
+
+        cv_params_t cvp = CV_PARAMS_DEFAULT;
+        cvp.electrode = (electrode_t)electrode;
+
+        if (p_j) {
+#define CV_GET(field, key) { cJSON *_x = cJSON_GetObjectItem(p_j, key); \
+    if (_x && cJSON_IsNumber(_x)) cvp.field = (typeof(cvp.field))_x->valuedouble; }
+            CV_GET(e_begin_mV,         "e_begin_mV")
+            CV_GET(e_vertex1_mV,       "e_vertex1_mV")
+            CV_GET(e_vertex2_mV,       "e_vertex2_mV")
+            CV_GET(e_step_mV,          "e_step_mV")
+            CV_GET(scan_rate_mV_s,     "scan_rate_mV_s")
+            CV_GET(t_equilibration_ms, "t_equilibration_ms")
+            CV_GET(cycles,             "cycles")
+            CV_GET(n_avg,              "n_avg")
+#undef CV_GET
+        }
+
+        esp_err_t cv_err = engine_start_technique("CV", electrode, &cvp, sizeof(cvp));
+        if (cv_err != ESP_OK) {
+            cJSON *err_j = cJSON_CreateObject();
+            if (err_j) {
+                cJSON_AddStringToObject(err_j, "t", "error");
+                cJSON_AddStringToObject(err_j, "msg", esp_err_to_name(cv_err));
                 char *s = cJSON_PrintUnformatted(err_j);
                 cJSON_Delete(err_j);
                 if (s) {

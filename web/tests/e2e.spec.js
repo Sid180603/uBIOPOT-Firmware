@@ -171,8 +171,8 @@ testWithServer('C2: t_period < t_pulse shows validation error', async ({ page, s
   await page.goto(server.url);
   await page.waitForTimeout(500);
 
-  // #t-period is inside <details> — open it first
-  await page.locator('details').evaluate(el => el.setAttribute('open', ''));
+  // #t-period is inside <details> inside #dpv-form — open it first
+  await page.locator('#dpv-form details').evaluate(el => el.setAttribute('open', ''));
   await page.locator('#t-pulse').first().fill('100');
   await page.locator('#t-period').first().fill('50');
   await page.getByTestId('btn-start').click();

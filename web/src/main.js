@@ -534,7 +534,7 @@ function validateForm() {
   }
   // If t_period is invalid it's hidden inside <details> — force-open so the red field is visible
   if (document.getElementById('f-t-period')?.classList.contains('invalid')) {
-    document.querySelector('details')?.setAttribute('open', '');
+    document.querySelector('#dpv-form details')?.setAttribute('open', '');
   }
   return anyInvalid ? null : params;
 }

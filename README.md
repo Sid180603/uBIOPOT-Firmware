@@ -21,11 +21,13 @@ components/
   acq_engine/    — FreeRTOS: Core-1 AcquisitionTask, data queue, engine API, server-auth buffer.
                    Technique-agnostic dispatch — selects DPV/CV/... by name from the registry.
   ui_tft/        — LVGL on-device UI: ILI9341 display, 2-button encoder navigation, live line chart.
-  net_comms/     — WiFi (SoftAP + STA), captive portal, mDNS, HTTP server, WebSocket binary protocol.
-  serial_comms/  — USB serial NDJSON protocol (UART0), engine sink, command parser, DPV + CV commands.
+  net_comms/     — WiFi (SoftAP + STA), captive portal, mDNS, HTTP server, WebSocket (DPV + CV + zero).
+  serial_comms/  — USB serial NDJSON protocol (UART0), engine sink, command parser, DPV + CV + zero.
 host_test/       — Standalone CMake + Unity. Tests echem_core on host GCC (no hardware needed).
-web/             — SPA source (Vite + uPlot). Built output gzip-compressed → LittleFS image.
-                   Includes mock_backend.js (Node WS mock), Playwright E2E tests, potentiostat-core.js.
+web/             — SPA source (Vite + uPlot). DPV/CV technique toggle, auto-zero button,
+                   tunable n_avg/cycles, scan-time estimates, Sample# axis mode for CV.
+                   Built output gzip-compressed → LittleFS image. Includes mock_backend.js,
+                   Playwright E2E tests, potentiostat-core.js.
 tools/           — serial_client.py (reference Python CLI) + observe_scan.py (DPV/CV scan capture + anomaly analysis).
 chips/           — Custom Wokwi chips: MCP4921 (SPI DAC) + ADS1115 (I²C ADC with Gaussian cell model).
 ```
@@ -118,7 +120,7 @@ Default electrode is **Electrode 3** (configurable from the TFT home screen or w
 
 **First DPV scan on real hardware (2026-07-12):** 281/281 points, scan_complete delivered, results screen loaded. Dry cell (open circuit) — flat ~0 µA as expected. Validated the full data pipeline from DAC/ADC through all three UIs.
 
-**First wet scan (2026-07-15):** 5 mM K₃[Fe(CN)₆] in 0.1 M KCl on screen-printed carbon electrode (Ag/AgCl RE). RE tracks E within ~19-45 mV — potentiostat voltage control confirmed. DPV peak is SNR-limited on this ADC (see Known Limitations below). CV implemented as the high-SNR diagnostic technique.
+**First wet scan (2026-07-15):** 5 mM K₃[Fe(CN)₆] in 0.1 M KCl on screen-printed carbon electrode (Ag/AgCl RE). RE tracks E within ~5 mV (CV) / ~45 mV (DPV during pulse). CV shows real scan-rate-dependent faradaic current with hysteresis — analog front-end confirmed working. DPV peak is SNR-limited on this ADC for small signals (see Known Limitations). Auto-zero implemented to cancel the ~405 µA TIA quiescent offset in CV.
 
 **Build size (P7):** `aquahmet.bin` 1292 KB (firmware) + `littlefs.bin` 1000 KB (web SPA) + bootloader 25 KB + partition table 3 KB. Total flash usage: ~2.3 MB of 4 MB.
 
@@ -126,23 +128,42 @@ Default electrode is **Electrode 3** (configurable from the TFT home screen or w
 
 ## Supported Techniques
 
+Both techniques are accessible from **all three interfaces**: web SPA (WiFi), USB serial (NDJSON), and TFT button (DPV only on TFT currently).
+
 ### DPV (Differential Pulse Voltammetry)
 Default technique. Staircase sweep with pulse at each step; plots ΔI = I_pulse − I_base vs E.
 
-    py -3.12 tools/observe_scan.py --port COM9 --electrode 3 --pulse 50
+**Web UI:** Select DPV in the technique toggle, set params in the form, press Start DPV. Tunable: pulse amplitude, step, period, pulse width, n_avg, cycles, E range, electrode.
+
+**Serial:**
+
+    py -3.12 tools/observe_scan.py --port COM9 --electrode 3 --pulse 50 --navg 10
 
 Tunable at runtime: `--pulse`, `--step`, `--period`, `--t-pulse`, `--navg`, `--e-begin`, `--e-end`.
 
 ### CV (Cyclic Voltammetry)
 Linear ramp E_begin → vertex1 → vertex2 → E_begin, N cycles. Plots raw I vs E.
 
+**Web UI:** Select CV in the technique toggle, set vertex potentials and scan rate, press Start CV. Chart auto-switches to Sample# X-axis mode (CV sweeps E non-monotonically).
+
+**Serial:**
+
     py -3.12 tools/observe_scan.py --port COM9 --electrode 3 --cv --timeout 150 --stall 20
 
 Tunable: `--cv-begin`, `--cv-vtx1`, `--cv-vtx2`, `--cv-step`, `--cv-rate`, `--cv-cycles`, `--navg`.
 
-Serial command: `{"cmd":"cv","electrode":3,"params":{"e_vertex1_mV":600,"scan_rate_mV_s":50}}`
-
 Default CV params: E_begin = −200 mV, vertex1 = +600 mV, vertex2 = −200 mV, step = 5 mV, rate = 50 mV/s, 2 cycles, n_avg = 4.
+
+### Auto-Zero (current offset calibration)
+Deselects the electrode mux (WE floating), reads the TIA quiescent output, and stores the offset so subsequent readings report ~0 at zero cell current. Runtime-only (resets on reboot).
+
+**Web UI:** Press the ⊘ Zero button (available when idle).
+
+**Serial:**
+
+    py -3.12 tools/observe_scan.py --port COM9 --electrode 3 --cv --zero --timeout 150 --stall 20
+
+The `--zero` flag sends `{"cmd":"zero"}` before the scan starts.
 
 ---
 
@@ -202,6 +223,8 @@ A captive portal intercepts DNS and pops the SPA in your browser automatically o
 Manual access: `http://192.168.4.1`
 
 The WebSocket streams live DPV/CV data at `ws://192.168.4.1/ws` (binary DataPoint frames, 16 bytes LE).
+
+The web SPA has full command parity with the serial interface: DPV/CV technique toggle, all scan parameters (including n_avg and cycles), auto-zero button, and three chart axis modes (Commanded V, Measured RE, Sample#).
 
 ---
 
@@ -281,6 +304,8 @@ Bugs found and fixed during the first real DPV scans on hardware:
 | `scan_complete` never delivered | Dispatcher blocked on LVGL lock (priority inversion) | Per-event lock: 1s for terminal events, 100ms for non-terminal |
 | TFT stuck on scan screen | Lock timeout skipped screen transition | Line chart renders fast → 1s timeout always succeeds |
 | LVGL calls without lock | `scr_scan_stop_elapsed()` outside lock guard | Moved inside `if (locked)` for terminal events |
+| ~405 µA CV baseline offset | TIA quiescent output ≠ assumed `vref_mid` | Auto-zero (`CMD_ZERO`) measures and cancels the offset at runtime |
+| CV and zero not accessible from web UI | net_comms.c had no `"cv"` handler; SPA had no CV form or Zero button | Added WS `"cv"` handler, SPA technique toggle, CV form, Zero button, n_avg/cycles fields |
 
 ---
 

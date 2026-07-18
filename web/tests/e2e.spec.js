@@ -96,8 +96,8 @@ testWithServer('A2: aqua background applied', async ({ page, server }) => {
   const bg = await page.evaluate(() =>
     window.getComputedStyle(document.body).backgroundColor
   );
-  // --bg: #edf5fa = rgb(237, 245, 250)
-  expect(bg).toBe('rgb(237, 245, 250)');
+  // --bg: #e8f1f8 = rgb(232, 241, 248)
+  expect(bg).toBe('rgb(232, 241, 248)');
 });
 
 testWithServer('A3: Start DPV button visible', async ({ page, server }) => {

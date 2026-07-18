@@ -341,9 +341,18 @@ module.exports = { start, encodeDP, syntheticCurrent, MockServer };
 
 // ── CLI entry-point ───────────────────────────────────────────────────────────
 if (require.main === module) {
-  const args   = process.argv.slice(2);
-  const port   = parseInt(args[args.indexOf('--port') + 1] || '3000', 10);
-  const distDir = args[args.indexOf('--dist') + 1] || path.join(__dirname, 'dist');
+  const args = process.argv.slice(2);
+
+  // Read the value following a flag, or return the default if the flag is
+  // absent. NOTE: indexOf returns -1 when the flag is missing; `-1 + 1 === 0`
+  // would otherwise wrongly grab args[0], so guard on the index explicitly.
+  const getArg = (flag, fallback) => {
+    const i = args.indexOf(flag);
+    return (i !== -1 && i + 1 < args.length) ? args[i + 1] : fallback;
+  };
+
+  const port    = parseInt(getArg('--port', '3000'), 10);
+  const distDir = getArg('--dist', path.join(__dirname, 'dist'));
 
   start({ port, distDir }).then(({ url, wsUrl }) => {
     console.log(`Mock server:  ${url}`);

@@ -196,11 +196,16 @@ function createChart() {
   chart = new uPlot(opts, buildChartData(), $chartWrap);
 }
 
-// Resize chart when window resizes
-const resizeObs = new ResizeObserver(() => {
+// Resize chart when its wrapper resizes. We size the chart from the observed
+// element's own contentRect (the layout-driven dimensions), NOT by reading the
+// chart container's clientHeight back — the container is absolutely positioned
+// inside the wrapper, so its size follows the wrapper and can never feed back
+// into layout. This makes resizing stable and loop-free.
+const resizeObs = new ResizeObserver((entries) => {
   if (!chart) return;
-  const W = $chartWrap.clientWidth;
-  const H = $chartWrap.clientHeight || 300;
+  const cr = entries[0].contentRect;
+  const W = Math.round(cr.width);
+  const H = Math.round(cr.height);
   if (W > 0 && H > 0) chart.setSize({ width: W, height: H });
 });
 resizeObs.observe($chartWrap.parentElement);

@@ -1,6 +1,6 @@
 :root {
   /* Aqua-HMET palette — light aqua / clinical, high-contrast on white */
-  --bg:        #edf5fa;
+  --bg:        #e8f1f8;
   --surface:   #ffffff;
   --surface2:  #daeaf5;
   --border:    #a8cce0;
@@ -37,8 +37,7 @@ html, body {
 #app {
   display: flex;
   flex-direction: column;
-  height: 100vh;
-  height: 100dvh; /* mobile: excludes address bar, prevents bottom clip */
+  min-height: 100dvh;
   max-width: 1400px;
   margin: 0 auto;
   padding: 0 12px;
@@ -75,6 +74,15 @@ html, body {
   margin-left: auto;
 }
 
+/* Technique toggle in topbar */
+#tech-toggle {
+  margin-left: 16px;
+}
+#tech-toggle .btn {
+  padding: 3px 12px;
+  font-size: 0.78rem;
+}
+
 .status-dot {
   width: 8px; height: 8px;
   border-radius: 50%;
@@ -87,32 +95,42 @@ html, body {
 
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
 
-/* Main content */
+/* Main content: chart left (dominant), params right (narrow) */
 #main {
-  flex: 1;
   display: grid;
-  grid-template-columns: 260px 1fr;
+  grid-template-columns: 1fr 240px;
   gap: 12px;
   padding: 12px 0;
-  overflow: hidden;
-  min-height: 0;
+  align-items: start;
 }
 
-/* Left panel: controls */
-#panel-left {
+/* Chart panel — dominant left column */
+#panel-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* Params panel — narrow right column */
+#panel-params {
   display: flex;
   flex-direction: column;
   gap: 10px;
   overflow-y: auto;
 }
 
-/* Right panel: chart + results */
-#panel-right {
+/* Bottom row: secondary cards in a flex row */
+#panel-bottom {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   gap: 10px;
-  min-width: 0;
-  overflow: hidden;
+  padding: 0 0 16px 0;
+}
+
+.bottom-card {
+  flex: 1 1 200px;
+  min-width: 180px;
 }
 
 /* ── Cards ────────────────────────────────────────────────────────────────── */
@@ -193,15 +211,19 @@ html, body {
 /* ── Chart area ───────────────────────────────────────────────────────────── */
 
 #chart-wrap {
-  flex: 1;
-  min-height: 0;
-  position: relative;
+  flex: 1;            /* fills chart-card's remaining height after title + readout */
+  min-height: 0;      /* allows shrinking below content height in flex context */
+  position: relative; /* positioning context for the absolutely-placed container */
+  overflow: hidden;   /* clip any uPlot legend/canvas overflow */
 }
 
 #chart-container {
-  width: 100%;
-  height: 100%;
-  min-height: 260px;
+  /* Absolutely positioned so uPlot's canvas + legend can NEVER contribute to
+     #chart-wrap's flow height. This decouples the chart's rendered size from
+     the layout, preventing a ResizeObserver feedback loop where the legend
+     (rendered below the canvas) would nudge the wrapper taller each frame. */
+  position: absolute;
+  inset: 0;
 }
 
 /* uPlot overrides for dark theme */
@@ -212,10 +234,16 @@ html, body {
 .u-legend { background: transparent !important; color: var(--dim) !important; }
 .u-legend .u-label { color: var(--dim) !important; }
 
-/* Chart card — hero treatment: less chrome, more stage */
-#panel-right > .card:first-child {
+/* Chart card — hero treatment: less chrome, more stage.
+ * min-height gives the flex column container a definite size so that
+ * #chart-wrap's flex:1 resolves to a real pixel value and
+ * #chart-container's height:100% is not circular. */
+#chart-card {
   background: color-mix(in srgb, var(--bg) 70%, var(--surface) 30%);
   border-color: var(--border);
+  display: flex;
+  flex-direction: column;
+  min-height: 460px;
 }
 
 /* State-based ambient chart glow */
@@ -301,7 +329,26 @@ body:not([data-state='running']):not([data-state='equilibrating']) #readout span
 .adv-summary:hover { color: var(--text); }
 details[open] .adv-summary .adv-arrow { transform: rotate(90deg); }
 .adv-arrow { transition: transform 0.15s; display: inline-block; }
-
+/* Params <details> summary — styled like a card title on desktop */
+.params-summary {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  cursor: pointer;
+  list-style: none;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 10px;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.params-summary::-webkit-details-marker { display: none; }
+.params-summary::before { content: '\25BE '; font-size: 0.9rem; }
+#params-details:not([open]) > .params-summary::before { content: '\25B8 '; }
 /* ── Scan time estimate ────────────────────────────────────────────────────── */
 #scan-estimate {
   font-size: 0.75rem;
@@ -351,12 +398,14 @@ details[open] .adv-summary .adv-arrow { transform: rotate(90deg); }
 /* ── Responsive: stack on phones ──────────────────────────────────────────── */
 
 @media (max-width: 700px) {
+  /* Single column: chart (DOM-first) appears above params */
   #main {
     grid-template-columns: 1fr;
-    overflow-y: auto;
   }
-  #panel-right { overflow: visible; min-height: 300px; }
-  #chart-container { min-height: 340px; }
+  #panel-chart { min-height: 0; }
+  #panel-params { overflow: visible; }
+  #panel-bottom { flex-direction: column; }
+  #chart-card { min-height: 380px; }  /* smaller chart on narrow viewports */
 
   /* Touch targets — Apple HIG / WCAG 2.5.5 minimum 44×44px */
   .btn { min-height: 44px; padding: 10px 16px; }
